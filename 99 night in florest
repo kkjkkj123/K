@@ -1,0 +1,274 @@
+local player = game.Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+-- State variables
+local autoLoot = false
+local autoWood = false
+local autoTeleportChests = false
+local autoTeleportItems = false
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "JPdosScriptsHub"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Main Frame (draggable)
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 350, 0, 320)
+mainFrame.Position = UDim2.new(0.5, -175, 0.5, -160)
+mainFrame.BackgroundColor3 = Color3.fromRGB(34, 40, 49)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+-- Title
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0, 10, 0, 10)
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(200, 200, 200)
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.Text = "JP dos ScriptsHub"
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Close Button
+local closeBtn = Instance.new("TextButton", mainFrame)
+closeBtn.Size = UDim2.new(0, 80, 0, 30)
+closeBtn.Position = UDim2.new(1, -90, 0, 10)
+closeBtn.BackgroundColor3 = Color3.fromRGB(170, 40, 40)
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Font = Enum.Font.GothamSemibold
+closeBtn.TextSize = 20
+closeBtn.Text = "Close"
+local closeCorner = Instance.new("UICorner", closeBtn)
+closeCorner.CornerRadius = UDim.new(0, 8)
+
+-- Tabs Container
+local tabsFrame = Instance.new("Frame", mainFrame)
+tabsFrame.Size = UDim2.new(0, 100, 0, 260)
+tabsFrame.Position = UDim2.new(0, 10, 0, 50)
+tabsFrame.BackgroundColor3 = Color3.fromRGB(44, 50, 59)
+tabsFrame.BorderSizePixel = 0
+local tabsCorner = Instance.new("UICorner", tabsFrame)
+tabsCorner.CornerRadius = UDim.new(0, 8)
+
+-- Content Frame (to show tab content)
+local contentFrame = Instance.new("Frame", mainFrame)
+contentFrame.Size = UDim2.new(0, 230, 0, 260)
+contentFrame.Position = UDim2.new(0, 120, 0, 50)
+contentFrame.BackgroundColor3 = Color3.fromRGB(54, 60, 69)
+contentFrame.BorderSizePixel = 0
+local contentCorner = Instance.new("UICorner", contentFrame)
+contentCorner.CornerRadius = UDim.new(0, 8)
+
+-- Helper to create buttons
+local function createButton(parent, text, posY)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, -20, 0, 40)
+    btn.Position = UDim2.new(0, 10, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(67, 75, 89)
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 20
+    btn.Text = text
+    btn.AutoButtonColor = true
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 10)
+    return btn
+end
+
+-- Helper to clear content frame
+local function clearContent()
+    for _, child in pairs(contentFrame:GetChildren()) do
+        if not (child:IsA("UIListLayout") or child:IsA("UIPadding")) then
+            child:Destroy()
+        end
+    end
+end
+
+-- Tabs buttons
+local tabButtons = {}
+
+-- Create tab button function
+local function createTab(name, yPos)
+    local btn = Instance.new("TextButton", tabsFrame)
+    btn.Size = UDim2.new(1, -10, 0, 40)
+    btn.Position = UDim2.new(0, 5, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(67, 75, 89)
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 20
+    btn.Text = name
+    btn.AutoButtonColor = true
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 10)
+
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(54, 63, 80)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(67, 75, 89)
+    end)
+
+    return btn
+end
+
+-- Variables for toggles
+local toggles = {}
+
+-- Implement features
+local function collectItems()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local itemsFolder = workspace:FindFirstChild("Items")
+    if not itemsFolder then return end
+
+    for _, item in pairs(itemsFolder:GetChildren()) do
+        if item:IsA("BasePart") then
+            hrp.CFrame = item.CFrame + Vector3.new(0, 3, 0)
+            wait(0.3)
+        end
+    end
+end
+
+local function collectWood()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local treesFolder = workspace:FindFirstChild("Trees")
+    if not treesFolder then return end
+
+    for _, tree in pairs(treesFolder:GetChildren()) do
+        if tree:IsA("BasePart") then
+            hrp.CFrame = tree.CFrame + Vector3.new(0, 5, 0)
+            wait(0.5)
+            -- You can add tree cutting logic here if applicable
+        end
+    end
+end
+
+local function teleportToChests()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local chestsFolder = workspace:FindFirstChild("Chests") or workspace:FindFirstChild("Base")
+    if not chestsFolder then return end
+
+    for _, chest in pairs(chestsFolder:GetChildren()) do
+        if chest:IsA("BasePart") then
+            hrp.CFrame = chest.CFrame + Vector3.new(0, 5, 0)
+            wait(1)
+        end
+    end
+end
+
+local function teleportToItems()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local itemsFolder = workspace:FindFirstChild("Items")
+    if not itemsFolder then return end
+
+    for _, item in pairs(itemsFolder:GetChildren()) do
+        if item:IsA("BasePart") then
+            hrp.CFrame = item.CFrame + Vector3.new(0, 3, 0)
+            wait(0.5)
+        end
+    end
+end
+
+-- Tab content functions
+local function showItemsTab()
+    clearContent()
+    local y = 10
+
+    -- Auto Loot toggle
+    local lootBtn = createButton(contentFrame, "Auto Loot: OFF", y)
+    y = y + 50
+    lootBtn.MouseButton1Click:Connect(function()
+        toggles.autoLoot = not toggles.autoLoot
+        lootBtn.Text = "Auto Loot: " .. (toggles.autoLoot and "ON" or "OFF")
+    end)
+
+    -- Auto Wood toggle
+    local woodBtn = createButton(contentFrame, "Auto Wood: OFF", y)
+    y = y + 50
+    woodBtn.MouseButton1Click:Connect(function()
+        toggles.autoWood = not toggles.autoWood
+        woodBtn.Text = "Auto Wood: " .. (toggles.autoWood and "ON" or "OFF")
+    end)
+end
+
+local function showTeleportTab()
+    clearContent()
+    local y = 10
+
+    -- Teleport to Chests toggle
+    local chestBtn = createButton(contentFrame, "Teleport to Chests: OFF", y)
+    y = y + 50
+    chestBtn.MouseButton1Click:Connect(function()
+        toggles.teleportChests = not toggles.teleportChests
+        chestBtn.Text = "Teleport to Chests: " .. (toggles.teleportChests and "ON" or "OFF")
+    end)
+
+    -- Teleport to Items toggle
+    local itemTpBtn = createButton(contentFrame, "Teleport to Items: OFF", y)
+    y = y + 50
+    itemTpBtn.MouseButton1Click:Connect(function()
+        toggles.teleportItems = not toggles.teleportItems
+        itemTpBtn.Text = "Teleport to Items: " .. (toggles.teleportItems and "ON" or "OFF")
+    end)
+end
+
+-- Create tabs buttons
+local itemsTabBtn = createTab("Items", 10)
+local teleportTabBtn = createTab("Teleport", 60)
+
+itemsTabBtn.MouseButton1Click:Connect(function()
+    showItemsTab()
+end)
+teleportTabBtn.MouseButton1Click:Connect(function()
+    showTeleportTab()
+end)
+
+-- Show Items tab by default
+showItemsTab()
+
+-- Close button event
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui.Enabled = false
+end)
+
+-- Open button (optional)
+local openBtn = Instance.new("TextButton", screenGui)
+openBtn.Size = UDim2.new(0, 120, 0, 40)
+openBtn.Position = UDim2.new(0, 10, 0, 10)
+openBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 70)
+openBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+openBtn.Font = Enum.Font.GothamSemibold
+openBtn.TextSize = 20
+openBtn.Text = "Open Hub"
+openBtn.Visible = false
+local openCorner = Instance.new("UICorner", openBtn)
+openCorner.CornerRadius = UDim.new(0, 12)
+
+openBtn.MouseButton1Click:Connect(function()
+    screenGui.Enabled = true
+    openBtn.Visible = false
+end)
+
+-- Automation loop
+RunService.Heartbeat:Connect(function()
+    if toggles.autoLoot then
+        collectItems()
+    end
+    if toggles.autoWood then
+        collectWood()
+    end
+    if toggles.teleportChests then
+        teleportToChests()
+    end
+    if toggles.teleportItems then
+        teleportToItems()
+    end
+end)
