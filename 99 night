@@ -1,0 +1,407 @@
+local player = game.Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+-- Toggles and selected objects
+local toggles = {
+    autoLoot = false,
+    autoFood = false,
+    autoWood = false,
+}
+
+local selectedChest = nil
+local selectedFood = nil
+local selectedFuel = nil
+local selectedWood = nil
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "JPdosScriptsHub"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Main Frame
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 480, 0, 420)
+mainFrame.Position = UDim2.new(0.5, -240, 0.5, -210)
+mainFrame.BackgroundColor3 = Color3.fromRGB(10,10,10) -- almost black
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+-- Title
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, -20, 0, 45)
+title.Position = UDim2.new(0, 10, 0, 10)
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(230,230,230)
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.Text = "JP dos ScriptsHub"
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Close Button
+local closeBtn = Instance.new("TextButton", mainFrame)
+closeBtn.Size = UDim2.new(0, 90, 0, 35)
+closeBtn.Position = UDim2.new(1, -105, 0, 10)
+closeBtn.BackgroundColor3 = Color3.fromRGB(170, 40, 40)
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.Font = Enum.Font.GothamSemibold
+closeBtn.TextSize = 22
+closeBtn.Text = "Close"
+local closeCorner = Instance.new("UICorner", closeBtn)
+closeCorner.CornerRadius = UDim.new(0, 10)
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui.Enabled = false
+end)
+
+-- Tabs Container
+local tabsFrame = Instance.new("Frame", mainFrame)
+tabsFrame.Size = UDim2.new(0, 140, 0, 360)
+tabsFrame.Position = UDim2.new(0, 10, 0, 70)
+tabsFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+tabsFrame.BorderSizePixel = 0
+local tabsCorner = Instance.new("UICorner", tabsFrame)
+tabsCorner.CornerRadius = UDim.new(0, 12)
+
+-- Content Frame
+local contentFrame = Instance.new("Frame", mainFrame)
+contentFrame.Size = UDim2.new(1, -170, 0, 360)
+contentFrame.Position = UDim2.new(0, 160, 0, 70)
+contentFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+contentFrame.BorderSizePixel = 0
+local contentCorner = Instance.new("UICorner", contentFrame)
+contentCorner.CornerRadius = UDim.new(0, 12)
+
+-- Helper function to create tab buttons
+local function createTabBtn(text, y)
+    local btn = Instance.new("TextButton", tabsFrame)
+    btn.Size = UDim2.new(1, -20, 0, 50)
+    btn.Position = UDim2.new(0, 10, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    btn.TextColor3 = Color3.fromRGB(220,220,220)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 22
+    btn.Text = text
+    btn.AutoButtonColor = true
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 12)
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    end)
+    return btn
+end
+
+-- Helper to create toggle buttons inside content
+local function createToggleBtn(parent, text, y)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(1, -40, 0, 50)
+    btn.Position = UDim2.new(0, 20, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    btn.TextColor3 = Color3.fromRGB(230,230,230)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 20
+    btn.Text = text
+    btn.AutoButtonColor = true
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 10)
+    btn.MouseEnter:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+    end)
+    btn.MouseLeave:Connect(function()
+        btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    end)
+    return btn
+end
+
+-- Clear content function
+local function clearContent()
+    for _, c in pairs(contentFrame:GetChildren()) do
+        if not c:IsA("UICorner") then
+            c:Destroy()
+        end
+    end
+end
+
+-- Feature functions
+local function autoLootFunc()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local itemsFolder = workspace:FindFirstChild("Items")
+    if not itemsFolder then return end
+
+    for _, item in pairs(itemsFolder:GetChildren()) do
+        if item:IsA("BasePart") then
+            hrp.CFrame = item.CFrame + Vector3.new(0, 3, 0)
+            wait(0.3)
+        end
+    end
+end
+
+local function autoFoodFunc()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local foodFolder = workspace:FindFirstChild("Food")
+    if not foodFolder then return end
+
+    for _, food in pairs(foodFolder:GetChildren()) do
+        if food:IsA("BasePart") then
+            hrp.CFrame = food.CFrame + Vector3.new(0, 3, 0)
+            wait(0.4)
+        end
+    end
+end
+
+local function autoWoodFunc()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = player.Character.HumanoidRootPart
+    local treesFolder = workspace:FindFirstChild("Trees")
+    if not treesFolder then return end
+
+    for _, tree in pairs(treesFolder:GetChildren()) do
+        if tree:IsA("BasePart") then
+            hrp.CFrame = tree.CFrame + Vector3.new(0, 5, 0)
+            wait(0.7)
+        end
+    end
+end
+
+local function tpToChestFunc()
+    if not selectedChest then
+        warn("No chest selected!")
+        return
+    end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    player.Character.HumanoidRootPart.CFrame = selectedChest.CFrame + Vector3.new(0, 5, 0)
+end
+
+local function tpToFoodFunc()
+    if not selectedFood then
+        warn("No food selected!")
+        return
+    end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    player.Character.HumanoidRootPart.CFrame = selectedFood.CFrame + Vector3.new(0, 5, 0)
+end
+
+local function tpToWoodFunc()
+    if not selectedWood then
+        warn("No wood selected!")
+        return
+    end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    player.Character.HumanoidRootPart.CFrame = selectedWood.CFrame + Vector3.new(0, 5, 0)
+end
+
+local function tpToFuelFunc()
+    if not selectedFuel then
+        warn("No fuel selected!")
+        return
+    end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+    player.Character.HumanoidRootPart.CFrame = selectedFuel.CFrame + Vector3.new(0, 5, 0)
+end
+
+-- Tabs content
+local function showItemsTab()
+    clearContent()
+    local y = 10
+
+    local lootBtn = createToggleBtn(contentFrame, "Auto Loot: OFF", y)
+    y = y + 60
+    lootBtn.MouseButton1Click:Connect(function()
+        toggles.autoLoot = not toggles.autoLoot
+        lootBtn.Text = "Auto Loot: " .. (toggles.autoLoot and "ON" or "OFF")
+    end)
+
+    local foodBtn = createToggleBtn(contentFrame, "Auto Food: OFF", y)
+    y = y + 60
+    foodBtn.MouseButton1Click:Connect(function()
+        toggles.autoFood = not toggles.autoFood
+        foodBtn.Text = "Auto Food: " .. (toggles.autoFood and "ON" or "OFF")
+    end)
+end
+
+local function showWoodTab()
+    clearContent()
+    local y = 10
+
+    local woodBtn = createToggleBtn(contentFrame, "Auto Wood: OFF", y)
+    y = y + 60
+    woodBtn.MouseButton1Click:Connect(function()
+        toggles.autoWood = not toggles.autoWood
+        woodBtn.Text = "Auto Wood: " .. (toggles.autoWood and "ON" or "OFF")
+    end)
+end
+
+local function createDropdown(parent, y, titleText, items)
+    local label = Instance.new("TextLabel", parent)
+    label.Size = UDim2.new(1, -40, 0, 30)
+    label.Position = UDim2.new(0, 20, 0, y)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(230,230,230)
+    label.Font = Enum.Font.GothamSemibold
+    label.TextSize = 22
+    label.Text = titleText
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local dropdownFrame = Instance.new("Frame", parent)
+    dropdownFrame.Size = UDim2.new(1, -40, 0, 40)
+    dropdownFrame.Position = UDim2.new(0, 20, 0, y + 35)
+    dropdownFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    dropdownFrame.BorderSizePixel = 0
+    local corner = Instance.new("UICorner", dropdownFrame)
+    corner.CornerRadius = UDim.new(0,8)
+
+    local dropdownLabel = Instance.new("TextLabel", dropdownFrame)
+    dropdownLabel.Size = UDim2.new(1, -30, 1, 0)
+    dropdownLabel.Position = UDim2.new(0, 10, 0, 0)
+    dropdownLabel.BackgroundTransparency = 1
+    dropdownLabel.TextColor3 = Color3.fromRGB(230,230,230)
+    dropdownLabel.Font = Enum.Font.GothamSemibold
+    dropdownLabel.TextSize = 20
+    dropdownLabel.Text = "Select..."
+    dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local arrow = Instance.new("TextLabel", dropdownFrame)
+    arrow.Size = UDim2.new(0, 20, 1, 0)
+    arrow.Position = UDim2.new(1, -25, 0, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.TextColor3 = Color3.fromRGB(230,230,230)
+    arrow.Font = Enum.Font.GothamBold
+    arrow.TextSize = 24
+    arrow.Text = "▼"
+
+    local listFrame = Instance.new("ScrollingFrame", parent)
+    listFrame.Size = UDim2.new(1, -40, 0, 120)
+    listFrame.Position = UDim2.new(0, 20, 0, y + 75)
+    listFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    listFrame.BorderSizePixel = 0
+    listFrame.Visible = false
+    listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    listFrame.ScrollBarThickness = 5
+    local listCorner = Instance.new("UICorner", listFrame)
+    listCorner.CornerRadius = UDim.new(0, 8)
+
+    local buttons = {}
+
+    local function updateCanvasSize()
+        local count = #buttons
+        listFrame.CanvasSize = UDim2.new(0, 0, 0, count * 40)
+    end
+
+    for i, obj in ipairs(items) do
+        if obj:IsA("BasePart") then
+            local btn = Instance.new("TextButton", listFrame)
+            btn.Size = UDim2.new(1, -10, 0, 35)
+            btn.Position = UDim2.new(0, 5, 0, (i-1)*40)
+            btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            btn.TextColor3 = Color3.fromRGB(230,230,230)
+            btn.Font = Enum.Font.GothamSemibold
+            btn.TextSize = 18
+            btn.Text = obj.Name
+            local btnCorner = Instance.new("UICorner", btn)
+            btnCorner.CornerRadius = UDim.new(0, 6)
+
+            btn.MouseButton1Click:Connect(function()
+                dropdownLabel.Text = btn.Text
+                listFrame.Visible = false
+
+                -- Assign selected based on titleText
+                if titleText == "Select Chest:" then
+                    selectedChest = obj
+                elseif titleText == "Select Food to Teleport:" then
+                    selectedFood = obj
+                elseif titleText == "Select Wood to Teleport:" then
+                    selectedWood = obj
+                elseif titleText == "Select Fuel to Teleport:" then
+                    selectedFuel = obj
+                end
+            end)
+
+            buttons[#buttons + 1] = btn
+        end
+    end
+    updateCanvasSize()
+
+    dropdownFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            listFrame.Visible = not listFrame.Visible
+        end
+    end)
+end
+
+local function showTeleportTab()
+    clearContent()
+    local y = 10
+
+    local chestFolder = workspace:FindFirstChild("Chests") or {}
+    createDropdown(contentFrame, y, "Select Chest:", chestFolder:GetChildren())
+    y = y + 150
+
+    local tpChestBtn = createToggleBtn(contentFrame, "Teleport to Chest", y)
+    tpChestBtn.Position = UDim2.new(0, 20, 0, y)
+    tpChestBtn.MouseButton1Click:Connect(tpToChestFunc)
+    y = y + 60
+
+    local foodFolder = workspace:FindFirstChild("Food") or {}
+    createDropdown(contentFrame, y, "Select Food to Teleport:", foodFolder:GetChildren())
+    y = y + 150
+
+    local tpFoodBtn = createToggleBtn(contentFrame, "Teleport to Food", y)
+    tpFoodBtn.Position = UDim2.new(0, 20, 0, y)
+    tpFoodBtn.MouseButton1Click:Connect(tpToFoodFunc)
+    y = y + 60
+
+    local woodFolder = workspace:FindFirstChild("Trees") or {}
+    createDropdown(contentFrame, y, "Select Wood to Teleport:", woodFolder:GetChildren())
+    y = y + 150
+
+    local tpWoodBtn = createToggleBtn(contentFrame, "Teleport to Wood", y)
+    tpWoodBtn.Position = UDim2.new(0, 20, 0, y)
+    tpWoodBtn.MouseButton1Click:Connect(tpToWoodFunc)
+    y = y + 60
+
+    -- For fuels, example folder: workspace:FindFirstChild("Fuels")
+    local fuelsFolder = workspace:FindFirstChild("Fuels") or {}
+
+    createDropdown(contentFrame, y, "Select Fuel to Teleport:", fuelsFolder:GetChildren())
+    y = y + 150
+
+    local tpFuelBtn = createToggleBtn(contentFrame, "Teleport to Fuel", y)
+    tpFuelBtn.Position = UDim2.new(0, 20, 0, y)
+    tpFuelBtn.MouseButton1Click:Connect(tpToFuelFunc)
+end
+
+-- Create tab buttons
+local itemsTabBtn = createTabBtn("Items", 10)
+local woodTabBtn = createTabBtn("Wood", 70)
+local teleportTabBtn = createTabBtn("Teleport", 130)
+
+-- Connect tabs
+itemsTabBtn.MouseButton1Click:Connect(showItemsTab)
+woodTabBtn.MouseButton1Click:Connect(showWoodTab)
+teleportTabBtn.MouseButton1Click:Connect(showTeleportTab)
+
+-- Show Items tab by default
+showItemsTab()
+
+-- Auto functions loop
+spawn(function()
+    while true do
+        if toggles.autoLoot then
+            autoLootFunc()
+        end
+        if toggles.autoFood then
+            autoFoodFunc()
+        end
+        if toggles.autoWood then
+            autoWoodFunc()
+        end
+        wait(1)
+    end
+end)
