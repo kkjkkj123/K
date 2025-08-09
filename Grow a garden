@@ -1,148 +1,62 @@
--- JP dos ScriptsHub - Grow a Garden Auto Farm & Shop
-
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
-local Window = Rayfield:CreateWindow({
-    Name = "JP dos ScriptsHub | Grow a Garden",
-    LoadingTitle = "Loading Hub...",
-    LoadingSubtitle = "by JP dos ScriptsHub",
-    ConfigurationSaving = { Enabled = false }
-})
+-- jp dos scripthub - mobile version with chat toggle
 
 local player = game.Players.LocalPlayer
+local garden = workspace:WaitForChild("Garden")
+local fruitShop = workspace:WaitForChild("FruitShop")
+local gearShop = workspace:WaitForChild("GearShop")
 
-local autoCollect = false
-local autoSell = false
-local autoBuyFruits = false
-local autoBuyGears = false
+local scriptActive = true -- Starts active
 
--- List all fruits by their names in the game
-local fruitsList = {
-    "Apple",
-    "Banana",
-    "Strawberry",
-    "Blueberry",
-    "Watermelon",
-    "Grapes",
-    "Pineapple",
-    "Mango",
-    -- add other fruits if game has more
-}
-
--- List all gears by their names or IDs in the shop
-local gearsList = {
-    "WateringCan",
-    "Scarecrow",
-    "Fertilizer",
-    "Sprinkler",
-    "GardenGloves",
-    "Tractor",
-    -- add other gears if game has more
-}
-
--- Function to fire server to collect fruits
-local function collectFruits()
-    local args = {}
-    local remote = game.ReplicatedStorage:FindFirstChild("CollectFruitEvent") -- example remote event name
-    if remote then
-        remote:FireServer(unpack(args))
-    end
-end
-
--- Function to sell fruits
-local function sellFruits()
-    local remote = game.ReplicatedStorage:FindFirstChild("SellFruitsEvent") -- example remote event name
-    if remote then
-        remote:FireServer()
-    end
-end
-
--- Function to buy fruit by name
-local function buyFruit(fruitName)
-    local remote = game.ReplicatedStorage:FindFirstChild("BuyFruitEvent") -- example remote event name
-    if remote then
-        remote:FireServer(fruitName)
-    end
-end
-
--- Function to buy gear by name
-local function buyGear(gearName)
-    local remote = game.ReplicatedStorage:FindFirstChild("BuyGearEvent") -- example remote event name
-    if remote then
-        remote:FireServer(gearName)
-    end
-end
-
--- Loops
-
-task.spawn(function()
-    while task.wait(1) do
-        if autoCollect then
-            collectFruits()
-        end
+-- Toggle via chat
+player.Chatted:Connect(function(msg)
+    msg = msg:lower()
+    if msg == "/openjp" then
+        scriptActive = true
+        print("jp dos scripthub script activated!")
+    elseif msg == "/closejp" then
+        scriptActive = false
+        print("jp dos scripthub script deactivated!")
     end
 end)
 
-task.spawn(function()
-    while task.wait(5) do
-        if autoSell then
-            sellFruits()
+function autoCollectPlants()
+    for _, plant in pairs(garden:GetChildren()) do
+        if plant:IsA("Part") and plant:FindFirstChild("Collectible") then
+            firetouchinterest(player.Character.HumanoidRootPart, plant, 0)
+            firetouchinterest(player.Character.HumanoidRootPart, plant, 1)
         end
     end
-end)
+end
 
-task.spawn(function()
-    while task.wait(10) do
-        if autoBuyFruits then
-            for _, fruit in ipairs(fruitsList) do
-                buyFruit(fruit)
-            end
+function autoBuyFruits()
+    for _, fruit in pairs(fruitShop.Stock:GetChildren()) do
+        if fruit:IsA("Part") then
+            local args = {
+                [1] = fruit.Name,
+                [2] = 1
+            }
+            game.ReplicatedStorage.BuyFruit:InvokeServer(unpack(args))
         end
     end
-end)
+end
 
-task.spawn(function()
-    while task.wait(10) do
-        if autoBuyGears then
-            for _, gear in ipairs(gearsList) do
-                buyGear(gear)
-            end
+function autoBuyGears()
+    for _, gear in pairs(gearShop.Stock:GetChildren()) do
+        if gear:IsA("Part") then
+            local args = {
+                [1] = gear.Name,
+                [2] = 1
+            }
+            game.ReplicatedStorage.BuyGear:InvokeServer(unpack(args))
         end
     end
-end)
+end
 
--- UI
-
-local Tab = Window:CreateTab("Auto Farm & Shop")
-
-Tab:CreateToggle({
-    Name = "Auto Collect Fruits",
-    CurrentValue = false,
-    Callback = function(value)
-        autoCollect = value
+while true do
+    if scriptActive then
+        pcall(autoCollectPlants)
+        pcall(autoBuyFruits)
+        pcall(autoBuyGears)
     end
-})
-
-Tab:CreateToggle({
-    Name = "Auto Sell Fruits",
-    CurrentValue = false,
-    Callback = function(value)
-        autoSell = value
-    end
-})
-
-Tab:CreateToggle({
-    Name = "Auto Buy Fruits",
-    CurrentValue = false,
-    Callback = function(value)
-        autoBuyFruits = value
-    end
-})
-
-Tab:CreateToggle({
-    Name = "Auto Buy Gears",
-    CurrentValue = false,
-    Callback = function(value)
-        autoBuyGears = value
-    end
-})
+    wait(5)
+end
