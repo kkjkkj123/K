@@ -1,133 +1,148 @@
--- JP dos ScriptsHub - Legends of Speed Hub (Rayfield UI Version)
--- Works for Mobile and PC
+-- JP dos ScriptsHub - Grow a Garden Auto Farm & Shop
 
--- Load Rayfield UI
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Create Window
 local Window = Rayfield:CreateWindow({
-    Name = "JP dos ScriptsHub | Legends of Speed",
-    LoadingTitle = "Loading JP's Hub...",
-    LoadingSubtitle = "Made with Rayfield UI",
-    ConfigurationSaving = {
-        Enabled = false,
-        FolderName = nil,
-        FileName = "JP_LoS_Config"
-    },
-    Discord = {
-        Enabled = false
-    },
-    KeySystem = false
+    Name = "JP dos ScriptsHub | Grow a Garden",
+    LoadingTitle = "Loading Hub...",
+    LoadingSubtitle = "by JP dos ScriptsHub",
+    ConfigurationSaving = { Enabled = false }
 })
 
--- Variables
-local autoSpeed = false
-local autoGems = false
-local autoRebirth = false
-local autoOrbs = false
+local player = game.Players.LocalPlayer
 
--- Function to get closest item
-local function getClosestOrb(folderName)
-    local closest
-    local shortest = math.huge
-    local folder = workspace:FindFirstChild(folderName)
-    if folder then
-        for _, obj in ipairs(folder:GetChildren()) do
-            if obj:IsA("BasePart") then
-                local dist = (obj.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                if dist < shortest then
-                    shortest = dist
-                    closest = obj
-                end
-            end
-        end
+local autoCollect = false
+local autoSell = false
+local autoBuyFruits = false
+local autoBuyGears = false
+
+-- List all fruits by their names in the game
+local fruitsList = {
+    "Apple",
+    "Banana",
+    "Strawberry",
+    "Blueberry",
+    "Watermelon",
+    "Grapes",
+    "Pineapple",
+    "Mango",
+    -- add other fruits if game has more
+}
+
+-- List all gears by their names or IDs in the shop
+local gearsList = {
+    "WateringCan",
+    "Scarecrow",
+    "Fertilizer",
+    "Sprinkler",
+    "GardenGloves",
+    "Tractor",
+    -- add other gears if game has more
+}
+
+-- Function to fire server to collect fruits
+local function collectFruits()
+    local args = {}
+    local remote = game.ReplicatedStorage:FindFirstChild("CollectFruitEvent") -- example remote event name
+    if remote then
+        remote:FireServer(unpack(args))
     end
-    return closest
 end
 
--- Auto Speed loop
-task.spawn(function()
-    while task.wait(0.1) do
-        if autoSpeed and workspace:FindFirstChild("Rings") then
-            local ring = getClosestOrb("Rings")
-            if ring then
-                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = ring.CFrame
-            end
-        end
+-- Function to sell fruits
+local function sellFruits()
+    local remote = game.ReplicatedStorage:FindFirstChild("SellFruitsEvent") -- example remote event name
+    if remote then
+        remote:FireServer()
     end
-end)
+end
 
--- Auto Gems loop
-task.spawn(function()
-    while task.wait(0.1) do
-        if autoGems and workspace:FindFirstChild("Gems") then
-            local gem = getClosestOrb("Gems")
-            if gem then
-                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = gem.CFrame
-            end
-        end
+-- Function to buy fruit by name
+local function buyFruit(fruitName)
+    local remote = game.ReplicatedStorage:FindFirstChild("BuyFruitEvent") -- example remote event name
+    if remote then
+        remote:FireServer(fruitName)
     end
-end)
+end
 
--- Auto Orbs loop
-task.spawn(function()
-    while task.wait(0.1) do
-        if autoOrbs and workspace:FindFirstChild("Orbs") then
-            local orb = getClosestOrb("Orbs")
-            if orb then
-                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = orb.CFrame
-            end
-        end
+-- Function to buy gear by name
+local function buyGear(gearName)
+    local remote = game.ReplicatedStorage:FindFirstChild("BuyGearEvent") -- example remote event name
+    if remote then
+        remote:FireServer(gearName)
     end
-end)
+end
 
--- Auto Rebirth loop
+-- Loops
+
 task.spawn(function()
     while task.wait(1) do
-        if autoRebirth then
-            if game.ReplicatedStorage:FindFirstChild("Rebirth") then
-                game.ReplicatedStorage.Rebirth:FireServer()
+        if autoCollect then
+            collectFruits()
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(5) do
+        if autoSell then
+            sellFruits()
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(10) do
+        if autoBuyFruits then
+            for _, fruit in ipairs(fruitsList) do
+                buyFruit(fruit)
             end
         end
     end
 end)
 
--- Create Tab
-local MainTab = Window:CreateTab("Main Functions", 4483362458)
+task.spawn(function()
+    while task.wait(10) do
+        if autoBuyGears then
+            for _, gear in ipairs(gearsList) do
+                buyGear(gear)
+            end
+        end
+    end
+end)
 
--- Toggles
-MainTab:CreateToggle({
-    Name = "Auto Speed",
+-- UI
+
+local Tab = Window:CreateTab("Auto Farm & Shop")
+
+Tab:CreateToggle({
+    Name = "Auto Collect Fruits",
     CurrentValue = false,
-    Flag = "AutoSpeedFlag",
-    Callback = function(Value)
-        autoSpeed = Value
+    Callback = function(value)
+        autoCollect = value
     end
 })
 
-MainTab:CreateToggle({
-    Name = "Auto Gems",
+Tab:CreateToggle({
+    Name = "Auto Sell Fruits",
     CurrentValue = false,
-    Flag = "AutoGemsFlag",
-    Callback = function(Value)
-        autoGems = Value
+    Callback = function(value)
+        autoSell = value
     end
 })
 
-MainTab:CreateToggle({
-    Name = "Auto Orbs",
+Tab:CreateToggle({
+    Name = "Auto Buy Fruits",
     CurrentValue = false,
-    Flag = "AutoOrbsFlag",
-    Callback = function(Value)
-        autoOrbs = Value
+    Callback = function(value)
+        autoBuyFruits = value
     end
 })
 
-MainTab:CreateToggle({
-    Name = "Auto Rebirth",
+Tab:CreateToggle({
+    Name = "Auto Buy Gears",
     CurrentValue = false,
-    Flag = "AutoRebirthFlag",
-    Callback = function(Value)
-        autoRebirth = Value
+    Callback = function(value)
+        autoBuyGears = value
     end
 })
