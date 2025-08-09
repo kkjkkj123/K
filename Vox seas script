@@ -1,0 +1,131 @@
+-- JP dos ScriptsHub | UI 1000x800
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+
+-- Criar ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "JPScriptsHubUI"
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Main Frame com tamanho 1000x800
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 1000, 0, 800)
+MainFrame.Position = UDim2.new(0.5, -500, 0.5, -400)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+MainFrame.Parent = ScreenGui
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+-- Título
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 70)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 48
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Text = "JP dos ScriptsHub"
+Title.Parent = MainFrame
+
+-- Função para criar botões toggle
+local function createToggleButton(text, posY)
+    local toggled = false
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.85, 0, 0, 60)
+    btn.Position = UDim2.new(0.075, 0, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 28
+    btn.Text = text .. ": OFF"
+    btn.AutoButtonColor = false
+    btn.Parent = MainFrame
+
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(70, 70, 85)}):Play()
+    end)
+
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 55)}):Play()
+    end)
+
+    return btn, function()
+        toggled = not toggled
+        btn.Text = text .. ": " .. (toggled and "ON" or "OFF")
+        return toggled
+    end
+end
+
+-- Toggles
+local autoFarmToggle = false
+local autoQuestToggle = false
+local highHitboxToggle = false
+
+-- Botões
+local autoFarmBtn, toggleAutoFarm = createToggleButton("Auto Farm", 100)
+local autoQuestBtn, toggleAutoQuest = createToggleButton("Auto Quest", 180)
+local teleportBtn = Instance.new("TextButton")
+teleportBtn.Size = UDim2.new(0.85, 0, 0, 60)
+teleportBtn.Position = UDim2.new(0.075, 0, 0, 260)
+teleportBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+teleportBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+teleportBtn.Font = Enum.Font.Gotham
+teleportBtn.TextSize = 28
+teleportBtn.Text = "Teleport to NPC"
+teleportBtn.AutoButtonColor = false
+teleportBtn.Parent = MainFrame
+
+local hitboxBtn, toggleHitbox = createToggleButton("High Hitbox", 340)
+
+-- Funções genéricas placeholders
+
+local function autoFarm()
+    print("Auto Farm running...")
+end
+
+local function autoQuest()
+    print("Auto Quest running...")
+end
+
+local function teleportToNPC()
+    print("Teleporting to NPC...")
+end
+
+local function setHighHitbox(enabled)
+    print("High Hitbox set to:", enabled)
+end
+
+-- Conexões dos botões
+autoFarmBtn.MouseButton1Click:Connect(function()
+    autoFarmToggle = toggleAutoFarm()
+end)
+
+autoQuestBtn.MouseButton1Click:Connect(function()
+    autoQuestToggle = toggleAutoQuest()
+end)
+
+teleportBtn.MouseButton1Click:Connect(function()
+    teleportToNPC()
+end)
+
+hitboxBtn.MouseButton1Click:Connect(function()
+    highHitboxToggle = toggleHitbox()
+    setHighHitbox(highHitboxToggle)
+end)
+
+-- Loop principal
+spawn(function()
+    while true do
+        wait(1)
+        if autoFarmToggle then
+            autoFarm()
+        end
+        if autoQuestToggle then
+            autoQuest()
+        end
+    end
+end)
