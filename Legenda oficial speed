@@ -1,0 +1,133 @@
+-- JP dos ScriptsHub - Legends of Speed Hub (Rayfield UI Version)
+-- Works for Mobile and PC
+
+-- Load Rayfield UI
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Create Window
+local Window = Rayfield:CreateWindow({
+    Name = "JP dos ScriptsHub | Legends of Speed",
+    LoadingTitle = "Loading JP's Hub...",
+    LoadingSubtitle = "Made with Rayfield UI",
+    ConfigurationSaving = {
+        Enabled = false,
+        FolderName = nil,
+        FileName = "JP_LoS_Config"
+    },
+    Discord = {
+        Enabled = false
+    },
+    KeySystem = false
+})
+
+-- Variables
+local autoSpeed = false
+local autoGems = false
+local autoRebirth = false
+local autoOrbs = false
+
+-- Function to get closest item
+local function getClosestOrb(folderName)
+    local closest
+    local shortest = math.huge
+    local folder = workspace:FindFirstChild(folderName)
+    if folder then
+        for _, obj in ipairs(folder:GetChildren()) do
+            if obj:IsA("BasePart") then
+                local dist = (obj.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if dist < shortest then
+                    shortest = dist
+                    closest = obj
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Auto Speed loop
+task.spawn(function()
+    while task.wait(0.1) do
+        if autoSpeed and workspace:FindFirstChild("Rings") then
+            local ring = getClosestOrb("Rings")
+            if ring then
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = ring.CFrame
+            end
+        end
+    end
+end)
+
+-- Auto Gems loop
+task.spawn(function()
+    while task.wait(0.1) do
+        if autoGems and workspace:FindFirstChild("Gems") then
+            local gem = getClosestOrb("Gems")
+            if gem then
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = gem.CFrame
+            end
+        end
+    end
+end)
+
+-- Auto Orbs loop
+task.spawn(function()
+    while task.wait(0.1) do
+        if autoOrbs and workspace:FindFirstChild("Orbs") then
+            local orb = getClosestOrb("Orbs")
+            if orb then
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = orb.CFrame
+            end
+        end
+    end
+end)
+
+-- Auto Rebirth loop
+task.spawn(function()
+    while task.wait(1) do
+        if autoRebirth then
+            if game.ReplicatedStorage:FindFirstChild("Rebirth") then
+                game.ReplicatedStorage.Rebirth:FireServer()
+            end
+        end
+    end
+end)
+
+-- Create Tab
+local MainTab = Window:CreateTab("Main Functions", 4483362458)
+
+-- Toggles
+MainTab:CreateToggle({
+    Name = "Auto Speed",
+    CurrentValue = false,
+    Flag = "AutoSpeedFlag",
+    Callback = function(Value)
+        autoSpeed = Value
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Gems",
+    CurrentValue = false,
+    Flag = "AutoGemsFlag",
+    Callback = function(Value)
+        autoGems = Value
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Orbs",
+    CurrentValue = false,
+    Flag = "AutoOrbsFlag",
+    Callback = function(Value)
+        autoOrbs = Value
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Rebirth",
+    CurrentValue = false,
+    Flag = "AutoRebirthFlag",
+    Callback = function(Value)
+        autoRebirth = Value
+    end
+})
