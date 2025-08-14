@@ -1,0 +1,1433 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+
+-- Player and Local Variables
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Game Configuration
+local GAME_CONFIG = {
+    ROUND_TIME = 180, -- 3 minutes per round
+    MIN_PLAYERS = 2,
+    MAX_PLAYERS = 12,
+    SPAWN_RADIUS = 50,
+    BRAINROT_SPAWN_INTERVAL = 2,
+    POWER_UP_SPAWN_INTERVAL = 15,
+    STEAL_DISTANCE = 10,
+    SPEED_BOOST_MULTIPLIER = 1.5,
+    JUMP_BOOST_MULTIPLIER = 1.3,
+    INVISIBILITY_DURATION = 8,
+    FREEZE_DURATION = 5
+}
+
+-- Brainrot Types with different rarities and values
+local BRAINROT_TYPES = {
+    {name = "Skibidi", rarity = "Common", value = 10, color = Color3.fromRGB(100, 149, 237)},
+    {name = "Ohio", rarity = "Common", value = 15, color = Color3.fromRGB(255, 165, 0)},
+    {name = "Sigma", rarity = "Uncommon", value = 25, color = Color3.fromRGB(255, 20, 147)},
+    {name = "Rizz", rarity = "Uncommon", value = 30, color = Color3.fromRGB(50, 205, 50)},
+    {name = "Gyatt", rarity = "Rare", value = 50, color = Color3.fromRGB(148, 0, 211)},
+    {name = "Fanum Tax", rarity = "Rare", value = 60, color = Color3.fromRGB(255, 69, 0)},
+    {name = "Baby Gronk", rarity = "Epic", value = 100, color = Color3.fromRGB(255, 215, 0)},
+    {name = "Alpha Wolf", rarity = "Epic", value = 120, color = Color3.fromRGB(192, 192, 192)},
+    {name = "Grimace Shake", rarity = "Legendary", value = 200, color = Color3.fromRGB(128, 0, 128)},
+    {name = "Backrooms", rarity = "Legendary", value = 250, color = Color3.fromRGB(255, 255, 0)},
+    {name = "Among Us", rarity = "Mythic", value = 500, color = Color3.fromRGB(255, 0, 0)},
+    {name = "Big Chungus", rarity = "Mythic", value = 1000, color = Color3.fromRGB(0, 0, 0)}
+}
+
+-- Power-ups
+local POWER_UPS = {
+    {name = "Speed Boost", duration = 10, icon = "🏃"},
+    {name = "Jump Boost", duration = 12, icon = "⬆️"},
+    {name = "Invisibility", duration = 8, icon = "👻"},
+    {name = "Freeze Shield", duration = 15, icon = "🛡️"},
+    {name = "Double Points", duration = 20, icon = "💎"},
+    {name = "Magnet", duration = 15, icon = "🧲"}
+}
+
+-- Game State Variables
+local gameState = {
+    isGameActive = false,
+    roundTime = GAME_CONFIG.ROUND_TIME,
+    players = {},
+    brainrotObjects = {},
+    powerUpObjects = {},
+    leaderboard = {},
+    currentRound = 0
+}
+
+-- Player Data
+local playerData = {
+    score = 0,
+    brainrotInventory = {},
+    activePowerUps = {},
+    kills = 0,
+    deaths = 0,
+    gamesPlayed = 0,
+    totalScore = 0
+}
+
+-- Sound Effects
+local sounds = {
+    collect = nil,
+    steal = nil,
+    powerup = nil,
+    gameStart = nil,
+    gameEnd = nil,
+    backgroundMusic = nil
+}
+
+-- GUI Elements
+local mainGui = nil
+local gameHUD = nil
+
+-- Utility Functions
+local function createSound(soundId, volume, pitch)
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://" .. soundId
+    sound.Volume = volume or 0.5
+    sound.Pitch = pitch or 1
+    sound.Parent = SoundService
+    return sound
+end
+
+local function getRandomSpawnPosition()
+    local angle = math.random() * math.pi * 2
+    local distance = math.random(10, GAME_CONFIG.SPAWN_RADIUS)
+    local x = math.cos(angle) * distance
+    local z = math.sin(angle) * distance
+    return Vector3.new(x, 50, z)
+end
+
+local function formatTime(seconds)
+    local minutes = math.floor(seconds / 60)
+    local secs = seconds % 60
+    return string.format("%02d:%02d", minutes, secs)
+end
+
+local function createFloatingText(text, position, color, size)
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Size = UDim2.new(0, 200, 0, 50)
+    billboardGui.StudsOffset = Vector3.new(0, 3, 0)
+    billboardGui.Parent = workspace
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = color or Color3.new(1, 1, 1)
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextStrokeTransparency = 0
+    textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    textLabel.Parent = billboardGui
+    
+    -- Position the billboard
+    local part = Instance.new("Part")
+    part.Size = Vector3.new(1, 1, 1)
+    part.Position = position
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = 1
+    part.Parent = workspace
+    billboardGui.Adornee = part
+    
+    -- Animate the text
+    local tween = TweenService:Create(
+        billboardGui,
+        TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {StudsOffset = Vector3.new(0, 8, 0)}
+    )
+    
+    local fadeTween = TweenService:Create(
+        textLabel,
+        TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {TextTransparency = 1}
+    )
+    
+    tween:Play()
+    fadeTween:Play()
+    
+    -- Clean up
+    Debris:AddItem(part, 2)
+    Debris:AddItem(billboardGui, 2)
+end
+
+-- Brainrot Management
+local function createBrainrotObject(brainrotType, position)
+    local brainrot = Instance.new("Part")
+    brainrot.Name = "Brainrot_" .. brainrotType.name
+    brainrot.Size = Vector3.new(2, 2, 2)
+    brainrot.Shape = Enum.PartType.Ball
+    brainrot.Material = Enum.Material.Neon
+    brainrot.BrickColor = BrickColor.new(brainrotType.color)
+    brainrot.Position = position
+    brainrot.Anchored = true
+    brainrot.CanCollide = false
+    brainrot.Parent = workspace
+    
+    -- Add spinning effect
+    local spin = Instance.new("BodyAngularVelocity")
+    spin.AngularVelocity = Vector3.new(0, 10, 0)
+    spin.MaxTorque = Vector3.new(0, math.huge, 0)
+    spin.Parent = brainrot
+    
+    -- Add glow effect
+    local pointLight = Instance.new("PointLight")
+    pointLight.Color = brainrotType.color
+    pointLight.Brightness = 2
+    pointLight.Range = 10
+    pointLight.Parent = brainrot
+    
+    -- Add floating effect
+    local floatTween = TweenService:Create(
+        brainrot,
+        TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+        {Position = position + Vector3.new(0, 2, 0)}
+    )
+    floatTween:Play()
+    
+    -- Add click detector
+    local clickDetector = Instance.new("ClickDetector")
+    clickDetector.MaxActivationDistance = 50
+    clickDetector.Parent = brainrot
+    
+    -- Store brainrot data
+    local brainrotData = {
+        object = brainrot,
+        type = brainrotType,
+        clickDetector = clickDetector
+    }
+    
+    table.insert(gameState.brainrotObjects, brainrotData)
+    
+    -- Handle collection
+    clickDetector.MouseClick:Connect(function(clickingPlayer)
+        if clickingPlayer == player and gameState.isGameActive then
+            collectBrainrot(brainrotData)
+        end
+    end)
+    
+    return brainrotData
+end
+
+local function collectBrainrot(brainrotData)
+    if not brainrotData or not brainrotData.object or not brainrotData.object.Parent then
+        return
+    end
+    
+    -- Add to inventory
+    table.insert(playerData.brainrotInventory, brainrotData.type)
+    
+    -- Add to score
+    local points = brainrotData.type.value
+    if playerData.activePowerUps["Double Points"] then
+        points = points * 2
+    end
+    playerData.score = playerData.score + points
+    
+    -- Visual feedback
+    createFloatingText("+" .. points .. " " .. brainrotData.type.name, 
+                      brainrotData.object.Position, 
+                      brainrotData.type.color, 24)
+    
+    -- Play sound
+    if sounds.collect then
+        sounds.collect:Play()
+    end
+    
+    -- Remove from game
+    brainrotData.object:Destroy()
+    for i, obj in ipairs(gameState.brainrotObjects) do
+        if obj == brainrotData then
+            table.remove(gameState.brainrotObjects, i)
+            break
+        end
+    end
+    
+    -- Update HUD
+    updateHUD()
+end
+
+local function spawnRandomBrainrot()
+    if not gameState.isGameActive then return end
+    
+    -- Determine rarity
+    local rand = math.random(1, 1000)
+    local selectedBrainrot
+    
+    if rand <= 400 then -- 40% Common
+        local commonTypes = {}
+        for _, brainrot in ipairs(BRAINROT_TYPES) do
+            if brainrot.rarity == "Common" then
+                table.insert(commonTypes, brainrot)
+            end
+        end
+        selectedBrainrot = commonTypes[math.random(#commonTypes)]
+    elseif rand <= 650 then -- 25% Uncommon
+        local uncommonTypes = {}
+        for _, brainrot in ipairs(BRAINROT_TYPES) do
+            if brainrot.rarity == "Uncommon" then
+                table.insert(uncommonTypes, brainrot)
+            end
+        end
+        selectedBrainrot = uncommonTypes[math.random(#uncommonTypes)]
+    elseif rand <= 800 then -- 15% Rare
+        local rareTypes = {}
+        for _, brainrot in ipairs(BRAINROT_TYPES) do
+            if brainrot.rarity == "Rare" then
+                table.insert(rareTypes, brainrot)
+            end
+        end
+        selectedBrainrot = rareTypes[math.random(#rareTypes)]
+    elseif rand <= 900 then -- 10% Epic
+        local epicTypes = {}
+        for _, brainrot in ipairs(BRAINROT_TYPES) do
+            if brainrot.rarity == "Epic" then
+                table.insert(epicTypes, brainrot)
+            end
+        end
+        selectedBrainrot = epicTypes[math.random(#epicTypes)]
+    elseif rand <= 970 then -- 7% Legendary
+        local legendaryTypes = {}
+        for _, brainrot in ipairs(BRAINROT_TYPES) do
+            if brainrot.rarity == "Legendary" then
+                table.insert(legendaryTypes, brainrot)
+            end
+        end
+        selectedBrainrot = legendaryTypes[math.random(#legendaryTypes)]
+    else -- 3% Mythic
+        local mythicTypes = {}
+        for _, brainrot in ipairs(BRAINROT_TYPES) do
+            if brainrot.rarity == "Mythic" then
+                table.insert(mythicTypes, brainrot)
+            end
+        end
+        selectedBrainrot = mythicTypes[math.random(#mythicTypes)]
+    end
+    
+    local spawnPos = getRandomSpawnPosition()
+    createBrainrotObject(selectedBrainrot, spawnPos)
+end
+
+-- Power-up Management
+local function createPowerUpObject(powerUpType, position)
+    local powerUp = Instance.new("Part")
+    powerUp.Name = "PowerUp_" .. powerUpType.name
+    powerUp.Size = Vector3.new(1.5, 1.5, 1.5)
+    powerUp.Shape = Enum.PartType.Ball
+    powerUp.Material = Enum.Material.ForceField
+    powerUp.BrickColor = BrickColor.new("Bright yellow")
+    powerUp.Position = position
+    powerUp.Anchored = true
+    powerUp.CanCollide = false
+    powerUp.Parent = workspace
+    
+    -- Add spinning effect
+    local spin = Instance.new("BodyAngularVelocity")
+    spin.AngularVelocity = Vector3.new(5, 5, 5)
+    spin.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    spin.Parent = powerUp
+    
+    -- Add glow effect
+    local pointLight = Instance.new("PointLight")
+    pointLight.Color = Color3.new(1, 1, 0)
+    pointLight.Brightness = 1.5
+    pointLight.Range = 8
+    pointLight.Parent = powerUp
+    
+    -- Add GUI label
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Size = UDim2.new(0, 100, 0, 30)
+    billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+    billboardGui.Parent = powerUp
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = powerUpType.icon .. " " .. powerUpType.name
+    textLabel.TextColor3 = Color3.new(1, 1, 1)
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextStrokeTransparency = 0
+    textLabel.Parent = billboardGui
+    
+    -- Add click detector
+    local clickDetector = Instance.new("ClickDetector")
+    clickDetector.MaxActivationDistance = 30
+    clickDetector.Parent = powerUp
+    
+    -- Store power-up data
+    local powerUpData = {
+        object = powerUp,
+        type = powerUpType,
+        clickDetector = clickDetector
+    }
+    
+    table.insert(gameState.powerUpObjects, powerUpData)
+    
+    -- Handle collection
+    clickDetector.MouseClick:Connect(function(clickingPlayer)
+        if clickingPlayer == player and gameState.isGameActive then
+            collectPowerUp(powerUpData)
+        end
+    end)
+    
+    -- Auto-remove after 30 seconds
+    Debris:AddItem(powerUp, 30)
+    game:GetService("Debris"):AddItem(powerUpData, 30)
+    
+    return powerUpData
+end
+
+local function collectPowerUp(powerUpData)
+    if not powerUpData or not powerUpData.object or not powerUpData.object.Parent then
+        return
+    end
+    
+    -- Apply power-up effect
+    applyPowerUpEffect(powerUpData.type)
+    
+    -- Visual feedback
+    createFloatingText(powerUpData.type.icon .. " " .. powerUpData.type.name, 
+                      powerUpData.object.Position, 
+                      Color3.new(1, 1, 0), 20)
+    
+    -- Play sound
+    if sounds.powerup then
+        sounds.powerup:Play()
+    end
+    
+    -- Remove from game
+    powerUpData.object:Destroy()
+    for i, obj in ipairs(gameState.powerUpObjects) do
+        if obj == powerUpData then
+            table.remove(gameState.powerUpObjects, i)
+            break
+        end
+    end
+end
+
+local function applyPowerUpEffect(powerUpType)
+    playerData.activePowerUps[powerUpType.name] = {
+        endTime = tick() + powerUpType.duration,
+        duration = powerUpType.duration
+    }
+    
+    if powerUpType.name == "Speed Boost" then
+        humanoid.WalkSpeed = humanoid.WalkSpeed * GAME_CONFIG.SPEED_BOOST_MULTIPLIER
+    elseif powerUpType.name == "Jump Boost" then
+        humanoid.JumpPower = humanoid.JumpPower * GAME_CONFIG.JUMP_BOOST_MULTIPLIER
+    elseif powerUpType.name == "Invisibility" then
+        for _, part in pairs(character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Transparency = 0.8
+            end
+        end
+    end
+    
+    updateHUD()
+    
+    -- Schedule removal
+    wait(powerUpType.duration)
+    removePowerUpEffect(powerUpType)
+end
+
+local function removePowerUpEffect(powerUpType)
+    playerData.activePowerUps[powerUpType.name] = nil
+    
+    if powerUpType.name == "Speed Boost" then
+        humanoid.WalkSpeed = 16 -- Default speed
+    elseif powerUpType.name == "Jump Boost" then
+        humanoid.JumpPower = 50 -- Default jump power
+    elseif powerUpType.name == "Invisibility" then
+        for _, part in pairs(character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Transparency = 0
+            end
+        end
+    end
+    
+    updateHUD()
+end
+
+local function spawnRandomPowerUp()
+    if not gameState.isGameActive then return end
+    
+    local selectedPowerUp = POWER_UPS[math.random(#POWER_UPS)]
+    local spawnPos = getRandomSpawnPosition()
+    createPowerUpObject(selectedPowerUp, spawnPos)
+end
+
+-- Stealing Mechanics
+local function attemptSteal(targetPlayer)
+    if not targetPlayer or targetPlayer == player then return end
+    
+    local targetCharacter = targetPlayer.Character
+    if not targetCharacter then return end
+    
+    local targetRootPart = targetCharacter:FindFirstChild("HumanoidRootPart")
+    if not targetRootPart then return end
+    
+    local distance = (rootPart.Position - targetRootPart.Position).Magnitude
+    if distance > GAME_CONFIG.STEAL_DISTANCE then return end
+    
+    -- Check if target has brainrot to steal
+    local targetData = gameState.players[targetPlayer.Name]
+    if not targetData or #targetData.brainrotInventory == 0 then return end
+    
+    -- Steal random brainrot
+    local randomIndex = math.random(#targetData.brainrotInventory)
+    local stolenBrainrot = table.remove(targetData.brainrotInventory, randomIndex)
+    
+    -- Add to own inventory
+    table.insert(playerData.brainrotInventory, stolenBrainrot)
+    
+    -- Update scores
+    playerData.score = playerData.score + stolenBrainrot.value
+    targetData.score = math.max(0, targetData.score - stolenBrainrot.value)
+    
+    -- Visual effects
+    createFloatingText("STOLEN: " .. stolenBrainrot.name, 
+                      rootPart.Position, 
+                      Color3.new(1, 0, 0), 24)
+    
+    createFloatingText("LOST: " .. stolenBrainrot.name, 
+                      targetRootPart.Position, 
+                      Color3.new(1, 0, 0), 24)
+    
+    -- Play sound
+    if sounds.steal then
+        sounds.steal:Play()
+    end
+    
+    -- Update stats
+    playerData.kills = playerData.kills + 1
+    targetData.deaths = targetData.deaths + 1
+    
+    updateHUD()
+end
+
+-- GUI Creation
+local function createMainGUI()
+    mainGui = Instance.new("ScreenGui")
+    mainGui.Name = "StealABrainrotGUI"
+    mainGui.ResetOnSpawn = false
+    mainGui.Parent = playerGui
+    
+    -- Main Frame
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 400, 0, 300)
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+    mainFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = mainGui
+    
+    -- Corner rounding
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = mainFrame
+    
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 50)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "🧠 STEAL A BRAINROT 🧠"
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = mainFrame
+    
+    -- Play Button
+    local playButton = Instance.new("TextButton")
+    playButton.Size = UDim2.new(0.8, 0, 0, 50)
+    playButton.Position = UDim2.new(0.1, 0, 0.3, 0)
+    playButton.BackgroundColor3 = Color3.new(0, 0.7, 0)
+    playButton.Text = "PLAY GAME"
+    playButton.TextColor3 = Color3.new(1, 1, 1)
+    playButton.TextScaled = true
+    playButton.Font = Enum.Font.GothamBold
+    playButton.Parent = mainFrame
+    
+    local playCorner = Instance.new("UICorner")
+    playCorner.CornerRadius = UDim.new(0, 5)
+    playCorner.Parent = playButton
+    
+    -- Instructions Button
+    local instructionsButton = Instance.new("TextButton")
+    instructionsButton.Size = UDim2.new(0.8, 0, 0, 40)
+    instructionsButton.Position = UDim2.new(0.1, 0, 0.55, 0)
+    instructionsButton.BackgroundColor3 = Color3.new(0, 0.5, 0.8)
+    instructionsButton.Text = "HOW TO PLAY"
+    instructionsButton.TextColor3 = Color3.new(1, 1, 1)
+    instructionsButton.TextScaled = true
+    instructionsButton.Font = Enum.Font.Gotham
+    instructionsButton.Parent = mainFrame
+    
+    local instrCorner = Instance.new("UICorner")
+    instrCorner.CornerRadius = UDim.new(0, 5)
+    instrCorner.Parent = instructionsButton
+    
+    -- Stats Button
+    local statsButton = Instance.new("TextButton")
+    statsButton.Size = UDim2.new(0.8, 0, 0, 40)
+    statsButton.Position = UDim2.new(0.1, 0, 0.75, 0)
+    statsButton.BackgroundColor3 = Color3.new(0.8, 0.5, 0)
+    statsButton.Text = "VIEW STATS"
+    statsButton.TextColor3 = Color3.new(1, 1, 1)
+    statsButton.TextScaled = true
+    statsButton.Font = Enum.Font.Gotham
+    statsButton.Parent = mainFrame
+    
+    local statsCorner = Instance.new("UICorner")
+    statsCorner.CornerRadius = UDim.new(0, 5)
+    statsCorner.Parent = statsButton
+    
+    -- Button Events
+    playButton.MouseButton1Click:Connect(function()
+        joinGame()
+    end)
+    
+    instructionsButton.MouseButton1Click:Connect(function()
+        showInstructions()
+    end)
+    
+    statsButton.MouseButton1Click:Connect(function()
+        showStats()
+    end)
+    
+    return mainGui
+end
+
+local function createGameHUD()
+    gameHUD = Instance.new("ScreenGui")
+    gameHUD.Name = "GameHUD"
+    gameHUD.ResetOnSpawn = false
+    gameHUD.Parent = playerGui
+    
+    -- Score Frame
+    local scoreFrame = Instance.new("Frame")
+    scoreFrame.Size = UDim2.new(0, 200, 0, 80)
+    scoreFrame.Position = UDim2.new(0, 10, 0, 10)
+    scoreFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+    scoreFrame.BackgroundTransparency = 0.3
+    scoreFrame.BorderSizePixel = 0
+    scoreFrame.Parent = gameHUD
+    
+    local scoreCorner = Instance.new("UICorner")
+    scoreCorner.Parent = scoreFrame
+    
+    local scoreLabel = Instance.new("TextLabel")
+    scoreLabel.Size = UDim2.new(1, 0, 0.6, 0)
+    scoreLabel.Position = UDim2.new(0, 0, 0, 0)
+    scoreLabel.BackgroundTransparency = 1
+    scoreLabel.Text = "Score: 0"
+    scoreLabel.TextColor3 = Color3.new(1, 1, 1)
+    scoreLabel.TextScaled = true
+    scoreLabel.Font = Enum.Font.GothamBold
+    scoreLabel.Parent = scoreFrame
+    
+    local inventoryLabel = Instance.new("TextLabel")
+    inventoryLabel.Size = UDim2.new(1, 0, 0.4, 0)
+    inventoryLabel.Position = UDim2.new(0, 0, 0.6, 0)
+    inventoryLabel.BackgroundTransparency = 1
+    inventoryLabel.Text = "Brainrot: 0"
+    inventoryLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+    inventoryLabel.TextScaled = true
+    inventoryLabel.Font = Enum.Font.Gotham
+    inventoryLabel.Parent = scoreFrame
+    
+    -- Timer Frame
+    local timerFrame = Instance.new("Frame")
+    timerFrame.Size = UDim2.new(0, 150, 0, 50)
+    timerFrame.Position = UDim2.new(0.5, -75, 0, 10)
+    timerFrame.BackgroundColor3 = Color3.new(0.8, 0, 0)
+    timerFrame.BackgroundTransparency = 0.3
+    timerFrame.BorderSizePixel = 0
+    timerFrame.Parent = gameHUD
+    
+    local timerCorner = Instance.new("UICorner")
+    timerCorner.Parent = timerFrame
+    
+    local timerLabel = Instance.new("TextLabel")
+    timerLabel.Size = UDim2.new(1, 0, 1, 0)
+    timerLabel.BackgroundTransparency = 1
+    timerLabel.Text = formatTime(GAME_CONFIG.ROUND_TIME)
+    timerLabel.TextColor3 = Color3.new(1, 1, 1)
+    timerLabel.TextScaled = true
+    timerLabel.Font = Enum.Font.GothamBold
+    timerLabel.Parent = timerFrame
+    
+    -- Power-ups Frame
+    local powerFrame = Instance.new("Frame")
+    powerFrame.Size = UDim2.new(0, 200, 0, 100)
+    powerFrame.Position = UDim2.new(1, -210, 0, 10)
+    powerFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+    powerFrame.BackgroundTransparency = 0.3
+    powerFrame.BorderSizePixel = 0
+    powerFrame.Parent = gameHUD
+    
+    local powerCorner = Instance.new("UICorner")
+    powerCorner.Parent = powerFrame
+    
+    local powerTitle = Instance.new("TextLabel")
+    powerTitle.Size = UDim2.new(1, 0, 0.3, 0)
+    powerTitle.BackgroundTransparency = 1
+    powerTitle.Text = "Active Power-ups:"
+    powerTitle.TextColor3 = Color3.new(1, 1, 1)
+    powerTitle.TextScaled = true
+    powerTitle.Font = Enum.Font.GothamBold
+    powerTitle.Parent = powerFrame
+    
+    local powerList = Instance.new("ScrollingFrame")
+    powerList.Size = UDim2.new(1, 0, 0.7, 0)
+    powerList.Position = UDim2.new(0, 0, 0.3, 0)
+    powerList.BackgroundTransparency = 1
+    powerList.ScrollBarThickness = 5
+    powerList.Parent = powerFrame
+    
+    -- Store references
+    gameHUD.scoreLabel = scoreLabel
+    gameHUD.inventoryLabel = inventoryLabel
+    gameHUD.timerLabel = timerLabel
+    gameHUD.powerList = powerList
+    
+    return gameHUD
+end
+
+local function updateHUD()
+    if not gameHUD then return end
+    
+    -- Update score
+    if gameHUD.scoreLabel then
+        gameHUD.scoreLabel.Text = "Score: " .. playerData.score
+    end
+    
+    -- Update inventory
+    if gameHUD.inventoryLabel then
+        gameHUD.inventoryLabel.Text = "Brainrot: " .. #playerData.brainrotInventory
+    end
+    
+    -- Update power-ups
+    if gameHUD.powerList then
+        gameHUD.powerList:ClearAllChildren()
+        
+        local yPos = 0
+        for powerName, powerData in pairs(playerData.activePowerUps) do
+            local powerLabel = Instance.new("TextLabel")
+            powerLabel.Size = UDim2.new(1, 0, 0, 25)
+            powerLabel.Position = UDim2.new(0, 0, 0, yPos)
+            powerLabel.BackgroundTransparency = 1
+            powerLabel.Text = powerName .. " (" .. math.ceil(powerData.endTime - tick()) .. "s)"
+            powerLabel.TextColor3 = Color3.new(0, 1, 0)
+            powerLabel.TextScaled = true
+            powerLabel.Font = Enum.Font.Gotham
+            powerLabel.Parent = gameHUD.powerList
+            
+            yPos = yPos + 25
+        end
+        
+        gameHUD.powerList.CanvasSize = UDim2.new(0, 0, 0, yPos)
+    end
+end
+
+-- Leaderboard System
+local function updateLeaderboard()
+    gameState.leaderboard = {}
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if gameState.players[player.Name] then
+            local data = gameState.players[player.Name]
+            table.insert(gameState.leaderboard, {
+                player = player,
+                score = data.score,
+                brainrotCount = #data.brainrotInventory
+            })
+        end
+    end
+    
+    table.sort(gameState.leaderboard, function(a, b)
+        return a.score > b.score
+    end)
+end
+
+local function showLeaderboard()
+    -- Create leaderboard GUI
+    local leaderboardGui = Instance.new("ScreenGui")
+    leaderboardGui.Name = "Leaderboard"
+    leaderboardGui.Parent = playerGui
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 300, 0, 400)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+    frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    frame.BorderSizePixel = 0
+    frame.Parent = leaderboardGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 50)
+    title.BackgroundTransparency = 1
+    title.Text = "🏆 LEADERBOARD 🏆"
+    title.TextColor3 = Color3.new(1, 1, 0)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = frame
+    
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, 0, 1, -100)
+    scrollFrame.Position = UDim2.new(0, 0, 0, 50)
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.ScrollBarThickness = 8
+    scrollFrame.Parent = frame
+    
+    -- Populate leaderboard
+    for i, entry in ipairs(gameState.leaderboard) do
+        local playerFrame = Instance.new("Frame")
+        playerFrame.Size = UDim2.new(1, -10, 0, 40)
+        playerFrame.Position = UDim2.new(0, 5, 0, (i-1) * 45)
+        playerFrame.BackgroundColor3 = i == 1 and Color3.new(1, 0.8, 0) or 
+                                      i == 2 and Color3.new(0.7, 0.7, 0.7) or 
+                                      i == 3 and Color3.new(0.8, 0.5, 0.2) or 
+                                      Color3.new(0.3, 0.3, 0.3)
+        playerFrame.Parent = scrollFrame
+        
+        local playerCorner = Instance.new("UICorner")
+        playerCorner.CornerRadius = UDim.new(0, 5)
+        playerCorner.Parent = playerFrame
+        
+        local rankLabel = Instance.new("TextLabel")
+        rankLabel.Size = UDim2.new(0, 30, 1, 0)
+        rankLabel.BackgroundTransparency = 1
+        rankLabel.Text = "#" .. i
+        rankLabel.TextColor3 = Color3.new(0, 0, 0)
+        rankLabel.TextScaled = true
+        rankLabel.Font = Enum.Font.GothamBold
+        rankLabel.Parent = playerFrame
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(0.5, -30, 1, 0)
+        nameLabel.Position = UDim2.new(0, 30, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = entry.player.DisplayName
+        nameLabel.TextColor3 = Color3.new(0, 0, 0)
+        nameLabel.TextScaled = true
+        nameLabel.Font = Enum.Font.Gotham
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = playerFrame
+        
+        local scoreLabel = Instance.new("TextLabel")
+        scoreLabel.Size = UDim2.new(0.5, 0, 1, 0)
+        scoreLabel.Position = UDim2.new(0.5, 0, 0, 0)
+        scoreLabel.BackgroundTransparency = 1
+        scoreLabel.Text = entry.score .. " pts"
+        scoreLabel.TextColor3 = Color3.new(0, 0, 0)
+        scoreLabel.TextScaled = true
+        scoreLabel.Font = Enum.Font.GothamBold
+        scoreLabel.TextXAlignment = Enum.TextXAlignment.Right
+        scoreLabel.Parent = playerFrame
+    end
+    
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #gameState.leaderboard * 45)
+    
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0.8, 0, 0, 40)
+    closeButton.Position = UDim2.new(0.1, 0, 1, -45)
+    closeButton.BackgroundColor3 = Color3.new(0.8, 0, 0)
+    closeButton.Text = "CLOSE"
+    closeButton.TextColor3 = Color3.new(1, 1, 1)
+    closeButton.TextScaled = true
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = frame
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 5)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        leaderboardGui:Destroy()
+    end)
+    
+    -- Auto-close after 10 seconds
+    Debris:AddItem(leaderboardGui, 10)
+end
+
+-- Game Management
+local function initializeGame()
+    -- Initialize sounds
+    sounds.collect = createSound("131961136", 0.5, 1.2) -- Collect sound
+    sounds.steal = createSound("131961136", 0.7, 0.8) -- Steal sound  
+    sounds.powerup = createSound("131961136", 0.6, 1.5) -- Power-up sound
+    sounds.gameStart = createSound("131961136", 0.8, 1) -- Game start
+    sounds.gameEnd = createSound("131961136", 0.8, 0.9) -- Game end
+    sounds.backgroundMusic = createSound("1839246711", 0.3, 1) -- Background music
+    
+    -- Set up lighting
+    Lighting.Ambient = Color3.new(0.2, 0.2, 0.3)
+    Lighting.Brightness = 1.5
+    Lighting.ColorShift_Bottom = Color3.new(0.1, 0.1, 0.2)
+    Lighting.ColorShift_Top = Color3.new(0.9, 0.9, 1)
+    
+    -- Create spawn area
+    local spawn = Instance.new("SpawnLocation")
+    spawn.Size = Vector3.new(20, 1, 20)
+    spawn.Position = Vector3.new(0, 0, 0)
+    spawn.BrickColor = BrickColor.new("Bright green")
+    spawn.Material = Enum.Material.Neon
+    spawn.Anchored = true
+    spawn.CanCollide = true
+    spawn.Parent = workspace
+    
+    -- Add spawn glow
+    local spawnLight = Instance.new("PointLight")
+    spawnLight.Color = Color3.new(0, 1, 0)
+    spawnLight.Brightness = 2
+    spawnLight.Range = 30
+    spawnLight.Parent = spawn
+    
+    -- Initialize player data
+    resetPlayerData()
+    
+    -- Create GUI
+    createMainGUI()
+    
+    print("Steal a Brainrot Game Initialized!")
+end
+
+local function resetPlayerData()
+    playerData.score = 0
+    playerData.brainrotInventory = {}
+    playerData.activePowerUps = {}
+    
+    -- Reset player stats
+    if humanoid then
+        humanoid.WalkSpeed = 16
+        humanoid.JumpPower = 50
+    end
+    
+    -- Make character visible
+    if character then
+        for _, part in pairs(character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.Transparency = 0
+            end
+        end
+    end
+end
+
+local function startGame()
+    gameState.isGameActive = true
+    gameState.roundTime = GAME_CONFIG.ROUND_TIME
+    gameState.currentRound = gameState.currentRound + 1
+    
+    -- Hide main menu
+    if mainGui then
+        mainGui.Enabled = false
+    end
+    
+    -- Show game HUD
+    if not gameHUD then
+        createGameHUD()
+    end
+    gameHUD.Enabled = true
+    
+    -- Reset all players
+    for _, player in pairs(Players:GetPlayers()) do
+        gameState.players[player.Name] = {
+            score = 0,
+            brainrotInventory = {},
+            activePowerUps = {},
+            kills = 0,
+            deaths = 0
+        }
+    end
+    
+    resetPlayerData()
+    
+    -- Clear existing objects
+    for _, brainrotData in ipairs(gameState.brainrotObjects) do
+        if brainrotData.object and brainrotData.object.Parent then
+            brainrotData.object:Destroy()
+        end
+    end
+    gameState.brainrotObjects = {}
+    
+    for _, powerUpData in ipairs(gameState.powerUpObjects) do
+        if powerUpData.object and powerUpData.object.Parent then
+            powerUpData.object:Destroy()
+        end
+    end
+    gameState.powerUpObjects = {}
+    
+    -- Play start sound
+    if sounds.gameStart then
+        sounds.gameStart:Play()
+    end
+    
+    -- Start background music
+    if sounds.backgroundMusic then
+        sounds.backgroundMusic.Looped = true
+        sounds.backgroundMusic:Play()
+    end
+    
+    -- Show start message
+    createFloatingText("🧠 GAME STARTED! 🧠", rootPart.Position, Color3.new(0, 1, 0), 32)
+    
+    -- Start spawning brainrot
+    spawn(function()
+        while gameState.isGameActive do
+            wait(GAME_CONFIG.BRAINROT_SPAWN_INTERVAL)
+            if gameState.isGameActive then
+                spawnRandomBrainrot()
+            end
+        end
+    end)
+    
+    -- Start spawning power-ups
+    spawn(function()
+        wait(10) -- Initial delay
+        while gameState.isGameActive do
+            wait(GAME_CONFIG.POWER_UP_SPAWN_INTERVAL)
+            if gameState.isGameActive then
+                spawnRandomPowerUp()
+            end
+        end
+    end)
+    
+    -- Start game timer
+    spawn(function()
+        while gameState.isGameActive and gameState.roundTime > 0 do
+            wait(1)
+            gameState.roundTime = gameState.roundTime - 1
+            
+            if gameHUD and gameHUD.timerLabel then
+                gameHUD.timerLabel.Text = formatTime(gameState.roundTime)
+                
+                -- Change color as time runs out
+                if gameState.roundTime <= 30 then
+                    gameHUD.timerLabel.TextColor3 = Color3.new(1, 0, 0)
+                elseif gameState.roundTime <= 60 then
+                    gameHUD.timerLabel.TextColor3 = Color3.new(1, 1, 0)
+                end
+            end
+            
+            -- Update power-ups
+            for powerName, powerData in pairs(playerData.activePowerUps) do
+                if tick() >= powerData.endTime then
+                    local powerType = nil
+                    for _, power in ipairs(POWER_UPS) do
+                        if power.name == powerName then
+                            powerType = power
+                            break
+                        end
+                    end
+                    if powerType then
+                        removePowerUpEffect(powerType)
+                    end
+                end
+            end
+            
+            updateHUD()
+        end
+        
+        if gameState.isGameActive then
+            endGame()
+        end
+    end)
+    
+    updateHUD()
+end
+
+local function endGame()
+    gameState.isGameActive = false
+    
+    -- Stop background music
+    if sounds.backgroundMusic then
+        sounds.backgroundMusic:Stop()
+    end
+    
+    -- Play end sound
+    if sounds.gameEnd then
+        sounds.gameEnd:Play()
+    end
+    
+    -- Update player stats
+    playerData.gamesPlayed = playerData.gamesPlayed + 1
+    playerData.totalScore = playerData.totalScore + playerData.score
+    
+    -- Show final score
+    createFloatingText("GAME OVER! Final Score: " .. playerData.score, 
+                      rootPart.Position, Color3.new(1, 0, 0), 28)
+    
+    -- Update and show leaderboard
+    updateLeaderboard()
+    wait(2)
+    showLeaderboard()
+    
+    -- Clean up
+    wait(5)
+    
+    -- Reset game state
+    for _, brainrotData in ipairs(gameState.brainrotObjects) do
+        if brainrotData.object and brainrotData.object.Parent then
+            brainrotData.object:Destroy()
+        end
+    end
+    gameState.brainrotObjects = {}
+    
+    for _, powerUpData in ipairs(gameState.powerUpObjects) do
+        if powerUpData.object and powerUpData.object.Parent then
+            powerUpData.object:Destroy()
+        end
+    end
+    gameState.powerUpObjects = {}
+    
+    -- Hide HUD and show menu
+    if gameHUD then
+        gameHUD.Enabled = false
+    end
+    
+    if mainGui then
+        mainGui.Enabled = true
+    end
+    
+    resetPlayerData()
+    updateHUD()
+end
+
+local function joinGame()
+    if gameState.isGameActive then
+        createFloatingText("Game already in progress!", rootPart.Position, Color3.new(1, 1, 0), 20)
+        return
+    end
+    
+    local playerCount = #Players:GetPlayers()
+    if playerCount < GAME_CONFIG.MIN_PLAYERS then
+        createFloatingText("Need at least " .. GAME_CONFIG.MIN_PLAYERS .. " players!", 
+                          rootPart.Position, Color3.new(1, 1, 0), 20)
+        return
+    end
+    
+    startGame()
+end
+
+local function showInstructions()
+    local instructionsGui = Instance.new("ScreenGui")
+    instructionsGui.Name = "Instructions"
+    instructionsGui.Parent = playerGui
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 500, 0, 400)
+    frame.Position = UDim2.new(0.5, -250, 0.5, -200)
+    frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    frame.BorderSizePixel = 0
+    frame.Parent = instructionsGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 50)
+    title.BackgroundTransparency = 1
+    title.Text = "📖 HOW TO PLAY 📖"
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = frame
+    
+    local instructionsText = Instance.new("TextLabel")
+    instructionsText.Size = UDim2.new(1, -20, 1, -100)
+    instructionsText.Position = UDim2.new(0, 10, 0, 50)
+    instructionsText.BackgroundTransparency = 1
+    instructionsText.Text = [[
+🎯 OBJECTIVE: Collect the most valuable brainrot and steal from other players!
+
+🧠 COLLECTING BRAINROT:
+• Click on floating brainrot objects to collect them
+• Different rarities have different values:
+  - Common (10-15 pts): Skibidi, Ohio
+  - Uncommon (25-30 pts): Sigma, Rizz  
+  - Rare (50-60 pts): Gyatt, Fanum Tax
+  - Epic (100-120 pts): Baby Gronk, Alpha Wolf
+  - Legendary (200-250 pts): Grimace Shake, Backrooms
+  - Mythic (500-1000 pts): Among Us, Big Chungus
+
+💥 STEALING:
+• Get close to other players and press E to steal their brainrot
+• You can steal one random brainrot from their inventory
+• Be careful - they can steal from you too!
+
+⚡ POWER-UPS:
+• Speed Boost: Move faster temporarily
+• Jump Boost: Jump higher 
+• Invisibility: Become harder to see
+• Freeze Shield: Protect from stealing
+• Double Points: Get 2x points for brainrot
+• Magnet: Attract nearby brainrot
+
+🏆 WINNING:
+• Player with highest score when time runs out wins!
+• Game lasts 3 minutes per round
+    ]]
+    instructionsText.TextColor3 = Color3.new(1, 1, 1)
+    instructionsText.TextScaled = true
+    instructionsText.Font = Enum.Font.Gotham
+    instructionsText.TextYAlignment = Enum.TextYAlignment.Top
+    instructionsText.TextXAlignment = Enum.TextXAlignment.Left
+    instructionsText.Parent = frame
+    
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0.3, 0, 0, 40)
+    closeButton.Position = UDim2.new(0.35, 0, 1, -45)
+    closeButton.BackgroundColor3 = Color3.new(0.8, 0, 0)
+    closeButton.Text = "CLOSE"
+    closeButton.TextColor3 = Color3.new(1, 1, 1)
+    closeButton.TextScaled = true
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = frame
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 5)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        instructionsGui:Destroy()
+    end)
+end
+
+local function showStats()
+    local statsGui = Instance.new("ScreenGui")
+    statsGui.Name = "Stats"
+    statsGui.Parent = playerGui
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 350, 0, 300)
+    frame.Position = UDim2.new(0.5, -175, 0.5, -150)
+    frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    frame.BorderSizePixel = 0
+    frame.Parent = statsGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 50)
+    title.BackgroundTransparency = 1
+    title.Text = "📊 YOUR STATS 📊"
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = frame
+    
+    local statsText = Instance.new("TextLabel")
+    statsText.Size = UDim2.new(1, -20, 1, -100)
+    statsText.Position = UDim2.new(0, 10, 0, 50)
+    statsText.BackgroundTransparency = 1
+    statsText.Text = string.format([[
+🎮 Games Played: %d
+
+🏆 Total Score: %d points
+
+📈 Average Score: %d points
+
+⚡ Current Session Score: %d
+
+🎯 Kills: %d
+
+💀 Deaths: %d
+
+📊 K/D Ratio: %.2f
+    ]], 
+    playerData.gamesPlayed,
+    playerData.totalScore,
+    playerData.gamesPlayed > 0 and math.floor(playerData.totalScore / playerData.gamesPlayed) or 0,
+    playerData.score,
+    playerData.kills,
+    playerData.deaths,
+    playerData.deaths > 0 and playerData.kills / playerData.deaths or playerData.kills)
+    
+    statsText.TextColor3 = Color3.new(1, 1, 1)
+    statsText.TextScaled = true
+    statsText.Font = Enum.Font.Gotham
+    statsText.TextYAlignment = Enum.TextYAlignment.Top
+    statsText.TextXAlignment = Enum.TextXAlignment.Left
+    statsText.Parent = frame
+    
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0.4, 0, 0, 40)
+    closeButton.Position = UDim2.new(0.3, 0, 1, -45)
+    closeButton.BackgroundColor3 = Color3.new(0.8, 0, 0)
+    closeButton.Text = "CLOSE"
+    closeButton.TextColor3 = Color3.new(1, 1, 1)
+    closeButton.TextScaled = true
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = frame
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 5)
+    closeCorner.Parent = closeButton
+    
+    closeButton.MouseButton1Click:Connect(function()
+        statsGui:Destroy()
+    end)
+end
+
+-- Input Handling
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed or not gameState.isGameActive then return end
+    
+    if input.KeyCode == Enum.KeyCode.E then
+        -- Find nearest player to steal from
+        local nearestPlayer = nil
+        local nearestDistance = GAME_CONFIG.STEAL_DISTANCE
+        
+        for _, otherPlayer in pairs(Players:GetPlayers()) do
+            if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local distance = (rootPart.Position - otherPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if distance < nearestDistance then
+                    nearestPlayer = otherPlayer
+                    nearestDistance = distance
+                end
+            end
+        end
+        
+        if nearestPlayer then
+            attemptSteal(nearestPlayer)
+        end
+    elseif input.KeyCode == Enum.KeyCode.Tab then
+        -- Show leaderboard
+        if gameState.isGameActive then
+            updateLeaderboard()
+            showLeaderboard()
+        end
+    elseif input.KeyCode == Enum.KeyCode.M then
+        -- Toggle music
+        if sounds.backgroundMusic then
+            if sounds.backgroundMusic.Playing then
+                sounds.backgroundMusic:Stop()
+            else
+                sounds.backgroundMusic:Play()
+            end
+        end
+    end
+end)
+
+-- Player Management
+Players.PlayerAdded:Connect(function(newPlayer)
+    gameState.players[newPlayer.Name] = {
+        score = 0,
+        brainrotInventory = {},
+        activePowerUps = {},
+        kills = 0,
+        deaths = 0
+    }
+end)
+
+Players.PlayerRemoving:Connect(function(removingPlayer)
+    gameState.players[removingPlayer.Name] = nil
+end)
+
+-- Character Respawn Handling
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    humanoid = character:WaitForChild("Humanoid")
+    rootPart = character:WaitForChild("HumanoidRootPart")
+    
+    -- Reset player data on respawn during active game
+    if gameState.isGameActive then
+        resetPlayerData()
+        updateHUD()
+    end
+end)
+
+-- Magnet Power-up Effect
+RunService.Heartbeat:Connect(function()
+    if not gameState.isGameActive or not playerData.activePowerUps["Magnet"] then return end
+    
+    for _, brainrotData in ipairs(gameState.brainrotObjects) do
+        if brainrotData.object and brainrotData.object.Parent then
+            local distance = (rootPart.Position - brainrotData.object.Position).Magnitude
+            if distance <= 20 then -- Magnet range
+                local direction = (rootPart.Position - brainrotData.object.Position).Unit
+                local newPosition = brainrotData.object.Position + direction * 0.5
+                brainrotData.object.Position = newPosition
+                
+                -- Auto-collect if very close
+                if distance <= 3 then
+                    collectBrainrot(brainrotData)
+                end
+            end
+        end
+    end
+end)
+
+-- Environmental Effects
+spawn(function()
+    while true do
+        wait(30)
+        -- Create ambient particle effects
+        local particle = Instance.new("Part")
+        particle.Size = Vector3.new(0.2, 0.2, 0.2)
+        particle.Material = Enum.Material.Neon
+        particle.BrickColor = BrickColor.new("Bright blue")
+        particle.Position = getRandomSpawnPosition() + Vector3.new(0, 20, 0)
+        particle.Anchored = true
+        particle.CanCollide = false
+        particle.Parent = workspace
+        
+        local tween = TweenService:Create(
+            particle,
+            TweenInfo.new(5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {Position = particle.Position - Vector3.new(0, 30, 0), Transparency = 1}
+        )
+        
+        tween:Play()
+        Debris:AddItem(particle, 5)
+    end
+end)
+
+-- Game Initialization
+initializeGame()
+
+-- Main Game Loop
+spawn(function()
+    while true do
+        wait(1)
+        
+        -- Update active power-ups countdown
+        for powerName, powerData in pairs(playerData.activePowerUps) do
+            if tick() >= powerData.endTime then
+                local powerType = nil
+                for _, power in ipairs(POWER_UPS) do
+                    if power.name == powerName then
+                        powerType = power
+                        break
+                    end
+                end
+                if powerType then
+                    removePowerUpEffect(powerType)
+                end
+            end
+        end
+        
+        updateHUD()
+    end
+end)
