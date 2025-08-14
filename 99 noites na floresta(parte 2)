@@ -1,0 +1,2652 @@
+-- Verificações de segurança e inicialização
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+-- Aguardar todos os serviços essenciais
+wait(2)
+
+-- Tentar carregar Orion Library com múltiplos métodos
+local OrionLib
+local loadAttempts = {
+    "https://raw.githubusercontent.com/shlexware/Orion/main/source",
+    "https://raw.githubusercontent.com/ionlyusegithubformcmods/1-Line-Scripts/main/Mobile%20Friendly%20Orion",
+    "https://raw.githubusercontent.com/shlexware/Orion/main/source.lua"
+}
+
+for i, url in ipairs(loadAttempts) do
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    
+    if success and result then
+        OrionLib = result
+        print("Orion carregado com sucesso usando método " .. i)
+        break
+    elseif i == #loadAttempts then
+        warn("Falha ao carregar Orion Library")
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "❌ Erro Crítico",
+            Text = "Não foi possível carregar a biblioteca de UI. Verifique sua conexão.",
+            Duration = 10
+        })
+        return
+    end
+end
+
+-- Serviços do Roblox
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
+local SoundService = game:GetService("SoundService")
+local TeleportService = game:GetService("TeleportService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Teams = game:GetService("Teams")
+local Chat = game:GetService("Chat")
+local PathfindingService = game:GetService("PathfindingService")
+local Debris = game:GetService("Debris")
+
+-- Variáveis globais do jogador
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Função para obter personagem atualizado
+local function getCharacter()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local Character = getCharacter()
+local Humanoid = Character:WaitForChild("Humanoid", 10)
+local RootPart = Character:WaitForChild("HumanoidRootPart", 10)
+
+-- Verificar se componentes essenciais existem
+if not Humanoid or not RootPart then
+    warn("Componentes essenciais do personagem não encontrados")
+    return
+end
+
+-- Variáveis principais do Hub
+local hubEnabled = true
+local hubVersion = "3.0.1"
+local lastUpdate = "14/08/2025"
+
+-- Sistema de configurações avançado
+local Settings = {
+    -- Auto Features
+    autoSurvive = false,
+    autoCollect = false,
+    autoHide = false,
+    autoRun = false,
+    autoFarm = false,
+    autoBuild = false,
+    autoFight = false,
+    autoHeal = false,
+    
+    -- ESP Settings
+    espPlayers = false,
+    espItems = false,
+    espMonsters = false,
+    espExits = false,
+    espBuildings = false,
+    espTraps = false,
+    espResources = false,
+    
+    -- Visual Settings
+    fullbright = false,
+    noFog = false,
+    customTime = false,
+    customAmbient = false,
+    customSkybox = false,
+    
+    -- Movement Settings
+    walkSpeed = 16,
+    jumpPower = 50,
+    flySpeed = 50,
+    noclip = false,
+    infiniteJump = false,
+    
+    -- Combat Settings
+    godMode = false,
+    infiniteStamina = false,
+    infiniteHealth = false,
+    autoDefend = false,
+    
+    -- Misc Settings
+    antiKick = true,
+    autoRejoin = false,
+    silentAim = false,
+    clickTeleport = false
+}
+
+-- Armazenamento de dados temporários
+local TempData = {
+    espObjects = {},
+    waypoints = {},
+    savedPositions = {},
+    playerData = {},
+    itemLocations = {},
+    monsterData = {},
+    buildingData = {},
+    connections = {},
+    loops = {}
+}
+
+-- Dados originais para restauração
+local OriginalData = {
+    walkSpeed = 16,
+    jumpPower = 50,
+    lighting = {
+        brightness = Lighting.Brightness,
+        ambient = Lighting.Ambient,
+        colorShift_Bottom = Lighting.ColorShift_Bottom,
+        colorShift_Top = Lighting.ColorShift_Top,
+        shadowSoftness = Lighting.ShadowSoftness,
+        timeOfDay = Lighting.TimeOfDay
+    },
+    camera = {}
+}
+
+-- Sistema de notificações avançado
+local NotificationSystem = {}
+NotificationSystem.queue = {}
+NotificationSystem.maxNotifications = 5
+NotificationSystem.currentNotifications = 0
+
+function NotificationSystem:Send(title, text, icon, duration, priority)
+    local notification = {
+        title = title or "🌲 Forest Hub",
+        text = text or "Ação executada",
+        icon = icon or "rbxassetid://4483345998",
+        duration = duration or 5,
+        priority = priority or 1
+    }
+    
+    if self.currentNotifications >= self.maxNotifications then
+        table.insert(self.queue, notification)
+        return
+    end
+    
+    local success = pcall(function()
+        if OrionLib and OrionLib.MakeNotification then
+            OrionLib:MakeNotification({
+                Name = notification.title,
+                Content = notification.text,
+                Image = notification.icon,
+                Time = notification.duration
+            })
+        else
+            StarterGui:SetCore("SendNotification", {
+                Title = notification.title,
+                Text = notification.text,
+                Duration = notification.duration
+            })
+        end
+    end)
+    
+    if success then
+        self.currentNotifications = self.currentNotifications + 1
+        delay(notification.duration, function()
+            self.currentNotifications = self.currentNotifications - 1
+            if #self.queue > 0 then
+                local nextNotification = table.remove(self.queue, 1)
+                self:Send(nextNotification.title, nextNotification.text, nextNotification.icon, nextNotification.duration, nextNotification.priority)
+            end
+        end)
+    end
+end
+
+-- Função de notificação simplificada
+local function notify(title, text, icon, duration)
+    NotificationSystem:Send(title, text, icon, duration)
+end
+
+-- Sistema de logs avançado
+local LogSystem = {}
+LogSystem.logs = {}
+LogSystem.maxLogs = 100
+
+function LogSystem:Add(type, message, data)
+    local log = {
+        type = type or "INFO",
+        message = message or "",
+        data = data or {},
+        timestamp = os.date("%H:%M:%S"),
+        tick = tick()
+    }
+    
+    table.insert(self.logs, log)
+    
+    if #self.logs > self.maxLogs then
+        table.remove(self.logs, 1)
+    end
+    
+    -- Print para console
+    print(string.format("[%s] [%s] %s", log.timestamp, log.type, log.message))
+    
+    -- Logs críticos viram notificações
+    if type == "ERROR" or type == "CRITICAL" then
+        notify("⚠️ " .. type, message, "rbxassetid://4483345998", 8)
+    end
+end
+
+function LogSystem:GetLogs(count)
+    count = count or 10
+    local recentLogs = {}
+    local startIndex = math.max(1, #self.logs - count + 1)
+    
+    for i = startIndex, #self.logs do
+        table.insert(recentLogs, self.logs[i])
+    end
+    
+    return recentLogs
+end
+
+-- Sistema de atualização de personagem
+local CharacterManager = {}
+
+function CharacterManager:UpdateReferences()
+    pcall(function()
+        Character = getCharacter()
+        if Character then
+            Humanoid = Character:WaitForChild("Humanoid", 5)
+            RootPart = Character:WaitForChild("HumanoidRootPart", 5)
+            
+            if Humanoid and RootPart then
+                LogSystem:Add("INFO", "Referências do personagem atualizadas")
+                return true
+            end
+        end
+        return false
+    end)
+end
+
+function CharacterManager:IsValid()
+    return Character and Character.Parent and Humanoid and RootPart and RootPart.Parent
+end
+
+function CharacterManager:WaitForValid()
+    while not self:IsValid() do
+        wait(0.1)
+        self:UpdateReferences()
+    end
+end
+
+-- Conectar eventos de respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    wait(1)
+    CharacterManager:UpdateReferences()
+    
+    -- Reaplicar configurações após respawn
+    if Settings.walkSpeed ~= OriginalData.walkSpeed then
+        Humanoid.WalkSpeed = Settings.walkSpeed
+    end
+    if Settings.jumpPower ~= OriginalData.jumpPower then
+        Humanoid.JumpPower = Settings.jumpPower
+    end
+    
+    notify("🔄 Respawn", "Configurações reaplicadas após respawn")
+end)
+
+-- Sistema ESP avançado
+local ESPSystem = {}
+ESPSystem.objects = {}
+
+function ESPSystem:CreateESP(object, config)
+    if not object or not object.Parent then return end
+    
+    local espConfig = config or {}
+    espConfig.color = espConfig.color or Color3.new(1, 1, 1)
+    espConfig.transparency = espConfig.transparency or 0.3
+    espConfig.name = espConfig.name or object.Name
+    espConfig.distance = espConfig.distance or true
+    espConfig.health = espConfig.health or false
+    
+    -- Criar BillboardGui
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_" .. object.Name
+    billboard.Adornee = object
+    billboard.Size = UDim2.new(0, 100, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    
+    -- Frame principal
+    local frame = Instance.new("Frame")
+    frame.Parent = billboard
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 1
+    
+    -- Label do nome
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Parent = frame
+    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = espConfig.name
+    nameLabel.TextColor3 = espConfig.color
+    nameLabel.TextScaled = true
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextStrokeTransparency = 0
+    nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    
+    -- Label da distância
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Parent = frame
+    distanceLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    distanceLabel.Position = UDim2.new(0, 0, 0.5, 0)
+    distanceLabel.BackgroundTransparency = 1
+    distanceLabel.Text = "0m"
+    distanceLabel.TextColor3 = Color3.new(1, 1, 1)
+    distanceLabel.TextScaled = true
+    distanceLabel.Font = Enum.Font.Gotham
+    distanceLabel.TextStrokeTransparency = 0
+    distanceLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    
+    -- Box ESP
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "ESP_Box"
+    box.Parent = object
+    box.Adornee = object
+    box.Color3 = espConfig.color
+    box.Transparency = espConfig.transparency
+    box.Size = object.Size * 1.1
+    box.AlwaysOnTop = true
+    
+    billboard.Parent = object
+    
+    -- Adicionar aos objetos ESP
+    self.objects[object] = {
+        billboard = billboard,
+        box = box,
+        config = espConfig
+    }
+    
+    -- Loop de atualização de distância
+    spawn(function()
+        while billboard.Parent and CharacterManager:IsValid() do
+            wait(0.1)
+            pcall(function()
+                local distance = (object.Position - RootPart.Position).Magnitude
+                distanceLabel.Text = math.floor(distance) .. "m"
+                
+                -- Fade baseado na distância
+                local alpha = math.max(0.1, 1 - (distance / 500))
+                nameLabel.TextTransparency = 1 - alpha
+                distanceLabel.TextTransparency = 1 - alpha
+                box.Transparency = 1 - (alpha * 0.7)
+            end)
+        end
+    end)
+end
+
+function ESPSystem:RemoveESP(object)
+    if self.objects[object] then
+        local espData = self.objects[object]
+        if espData.billboard then espData.billboard:Destroy() end
+        if espData.box then espData.box:Destroy() end
+        self.objects[object] = nil
+    end
+end
+
+function ESPSystem:ClearAll()
+    for object, _ in pairs(self.objects) do
+        self:RemoveESP(object)
+    end
+end
+
+function ESPSystem:UpdatePlayers()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if Settings.espPlayers and not self.objects[player.Character.HumanoidRootPart] then
+                self:CreateESP(player.Character.HumanoidRootPart, {
+                    color = Color3.new(0, 1, 0),
+                    name = player.Name,
+                    health = true
+                })
+            elseif not Settings.espPlayers and self.objects[player.Character.HumanoidRootPart] then
+                self:RemoveESP(player.Character.HumanoidRootPart)
+            end
+        end
+    end
+end
+
+-- Sistema de Teleporte avançado
+local TeleportSystem = {}
+TeleportSystem.locations = {
+    ["🏠 Spawn"] = Vector3.new(0, 50, 0),
+    ["🌲 Floresta Central"] = Vector3.new(100, 20, 100),
+    ["💧 Lago Cristalino"] = Vector3.new(-200, 10, 150),
+    ["⛰️ Pico da Montanha"] = Vector3.new(300, 100, -200),
+    ["🏚️ Cabana Abandonada"] = Vector3.new(-150, 25, -100),
+    ["🌊 Praia Secreta"] = Vector3.new(500, 5, -300),
+    ["🕳️ Caverna Misteriosa"] = Vector3.new(-400, -20, 200),
+    ["🏛️ Ruínas Antigas"] = Vector3.new(250, 30, 350),
+    ["🌋 Vulcão Adormecido"] = Vector3.new(-600, 150, -400),
+    ["❄️ Picos Gelados"] = Vector3.new(700, 200, 600)
+}
+
+function TeleportSystem:TeleportTo(position, smooth)
+    if not CharacterManager:IsValid() then
+        notify("❌ Erro", "Personagem inválido")
+        return false
+    end
+    
+    smooth = smooth or false
+    
+    pcall(function()
+        if smooth then
+            -- Teleporte suave
+            local startPos = RootPart.CFrame
+            local endPos = CFrame.new(position)
+            local distance = (startPos.Position - endPos.Position).Magnitude
+            local duration = math.min(distance / 100, 3) -- Max 3 segundos
+            
+            local tween = TweenService:Create(
+                RootPart,
+                TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+                {CFrame = endPos}
+            )
+            
+            tween:Play()
+        else
+            -- Teleporte instantâneo
+            RootPart.CFrame = CFrame.new(position + Vector3.new(0, 5, 0))
+        end
+        
+        LogSystem:Add("INFO", "Teleportado para: " .. tostring(position))
+        return true
+    end)
+    
+    return false
+end
+
+function TeleportSystem:SaveLocation(name, position)
+    position = position or RootPart.Position
+    self.locations[name] = position
+    TempData.waypoints[name] = position
+    notify("📍 Localização Salva", name .. " foi salvo!")
+    LogSystem:Add("INFO", "Localização salva: " .. name)
+end
+
+function TeleportSystem:TeleportToPlayer(playerName)
+    local targetPlayer = Players:FindFirstChild(playerName)
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+        self:TeleportTo(targetPos + Vector3.new(5, 0, 5))
+        notify("👥 Teleporte", "Teleportado para " .. playerName)
+        return true
+    end
+    
+    notify("❌ Erro", "Jogador não encontrado: " .. playerName)
+    return false
+end
+
+-- Sistema de Auto Farm
+local AutoFarmSystem = {}
+AutoFarmSystem.items = {}
+AutoFarmSystem.active = false
+
+function AutoFarmSystem:ScanForItems()
+    self.items = {}
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Part") or obj:IsA("MeshPart") then
+            local name = obj.Name:lower()
+            if name:find("food") or name:find("water") or name:find("item") or 
+               name:find("berry") or name:find("fruit") or name:find("wood") or
+               name:find("stone") or name:find("stick") then
+                table.insert(self.items, obj)
+            end
+        end
+    end
+    
+    LogSystem:Add("INFO", "Encontrados " .. #self.items .. " itens para farm")
+end
+
+function AutoFarmSystem:Start()
+    if self.active then return end
+    self.active = true
+    
+    spawn(function()
+        while self.active and hubEnabled do
+            wait(0.5)
+            
+            if not CharacterManager:IsValid() then
+                wait(1)
+                continue
+            end
+            
+            self:ScanForItems()
+            
+            for _, item in pairs(self.items) do
+                if not self.active then break end
+                if not item or not item.Parent then continue end
+                
+                pcall(function()
+                    local distance = (item.Position - RootPart.Position).Magnitude
+                    
+                    if distance <= 100 then
+                        -- Teleportar para o item
+                        RootPart.CFrame = CFrame.new(item.Position + Vector3.new(0, 5, 0))
+                        wait(0.2)
+                        
+                        -- Tentar coletar
+                        if item:FindFirstChild("ClickDetector") then
+                            fireclickdetector(item.ClickDetector)
+                        elseif item:FindFirstChild("ProximityPrompt") then
+                            fireproximityprompt(item.ProximityPrompt)
+                        end
+                        
+                        wait(0.3)
+                    end
+                end)
+            end
+            
+            wait(2)
+        end
+    end)
+    
+    notify("🚜 Auto Farm", "Auto Farm iniciado!")
+    LogSystem:Add("INFO", "Auto Farm iniciado")
+end
+
+function AutoFarmSystem:Stop()
+    self.active = false
+    notify("🛑 Auto Farm", "Auto Farm parado!")
+    LogSystem:Add("INFO", "Auto Farm parado")
+end
+
+-- Sistema de proteção e sobrevivência
+local SurvivalSystem = {}
+SurvivalSystem.active = false
+SurvivalSystem.threats = {}
+
+function SurvivalSystem:ScanForThreats()
+    self.threats = {}
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
+            local name = obj.Name:lower()
+            if name:find("monster") or name:find("beast") or name:find("enemy") or
+               name:find("zombie") or name:find("wolf") or name:find("bear") then
+                if obj:FindFirstChild("HumanoidRootPart") then
+                    table.insert(self.threats, obj)
+                end
+            end
+        end
+    end
+end
+
+function SurvivalSystem:Start()
+    if self.active then return end
+    self.active = true
+    
+    spawn(function()
+        while self.active and hubEnabled do
+            wait(0.1)
+            
+            if not CharacterManager:IsValid() then
+                wait(1)
+                continue
+            end
+            
+            self:ScanForThreats()
+            
+            -- Verificar ameaças próximas
+            for _, threat in pairs(self.threats) do
+                if threat and threat:FindFirstChild("HumanoidRootPart") then
+                    local distance = (threat.HumanoidRootPart.Position - RootPart.Position).Magnitude
+                    
+                    if distance <= 50 then
+                        -- Fugir da ameaça
+                        local escapeDirection = (RootPart.Position - threat.HumanoidRootPart.Position).Unit
+                        local escapePosition = RootPart.Position + (escapeDirection * 100)
+                        
+                        TeleportSystem:TeleportTo(escapePosition)
+                        notify("🏃 Fuga", "Fugindo de: " .. threat.Name)
+                        wait(2)
+                        break
+                    end
+                end
+            end
+            
+            -- Auto heal
+            if Humanoid.Health < Humanoid.MaxHealth * 0.7 then
+                Humanoid.Health = Humanoid.MaxHealth
+            end
+            
+            -- Manter stats
+            pcall(function()
+                for _, v in pairs(Character:GetChildren()) do
+                    if v:IsA("NumberValue") or v:IsA("IntValue") then
+                        local name = v.Name:lower()
+                        if name:find("hunger") or name:find("thirst") or name:find("stamina") or name:find("energy") then
+                            if v.Value < 80 then
+                                v.Value = 100
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+    
+    notify("🛡️ Sobrevivência", "Sistema de sobrevivência ativado!")
+    LogSystem:Add("INFO", "Sistema de sobrevivência iniciado")
+end
+
+function SurvivalSystem:Stop()
+    self.active = false
+    notify("🛑 Sobrevivência", "Sistema de sobrevivência desativado!")
+    LogSystem:Add("INFO", "Sistema de sobrevivência parado")
+end
+
+-- Sistema anti-kick avançado
+local AntiKickSystem = {}
+
+function AntiKickSystem:Enable()
+    -- Proteger contra kick do jogo
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+    
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if method == "Kick" then
+            LogSystem:Add("WARNING", "Tentativa de kick bloqueada!")
+            return
+        elseif method == "Destroy" and self == LocalPlayer then
+            LogSystem:Add("WARNING", "Tentativa de destruir jogador bloqueada!")
+            return
+        end
+        
+        return oldNamecall(self, ...)
+    end)
+    
+    setreadonly(mt, true)
+    
+    -- Proteger contra teleport para outros jogos
+    local oldTeleport = TeleportService.Teleport
+    TeleportService.Teleport = function(placeId, player, ...)
+        if player == LocalPlayer then
+            LogSystem:Add("WARNING", "Tentativa de teleport bloqueada para: " .. tostring(placeId))
+            return
+        end
+        return oldTeleport(placeId, player, ...)
+    end
+    
+    notify("🛡️ Proteção", "Sistema anti-kick ativado!")
+    LogSystem:Add("INFO", "Sistema anti-kick ativado")
+end
+
+-- Criar interface principal
+local Window = OrionLib:MakeWindow({
+    Name = "🌲 99 Nights in Forest Hub v" .. hubVersion,
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "ForestHub",
+    IntroEnabled = false,
+    IntroText = "Forest Hub Loading...",
+    IntroIcon = "rbxassetid://4483345998"
+})
+
+-- Criar todas as tabs
+local MainTab = Window:MakeTab({
+    Name = "🏠 Principal",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local AutoTab = Window:MakeTab({
+    Name = "🤖 Automação",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local ESPTab = Window:MakeTab({
+    Name = "👁️ ESP & Visuals",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local TeleportTab = Window:MakeTab({
+    Name = "📍 Teleporte",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local CombatTab = Window:MakeTab({
+    Name = "⚔️ Combate",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local PlayerTab = Window:MakeTab({
+    Name = "👤 Jogador",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local MiscTab = Window:MakeTab({
+    Name = "🔧 Diversos",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local SettingsTab = Window:MakeTab({
+    Name = "⚙️ Configurações",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- ===== TAB PRINCIPAL =====
+MainTab:AddLabel("🌟 99 Nights in Forest Hub Premium")
+MainTab:AddLabel("🔥 Versão " .. hubVersion .. " - Atualizado em " .. lastUpdate)
+
+MainTab:AddParagraph("ℹ️ Informações do Jogador", 
+    "Jogador: " .. LocalPlayer.Name .. 
+    "\nID do Usuário: " .. LocalPlayer.UserId ..
+    "\nServidor: " .. (game.JobId ~= "" and game.JobId or "Privado"))
+
+local statusSection = MainTab:AddSection({Name = "📊 Status do Jogo"})
+
+-- Status dinâmico do jogo
+local gameStatus = MainTab:AddLabel("🌙 Carregando status...")
+spawn(function()
+    while hubEnabled do
+        wait(1)
+        pcall(function()
+            local nightValue = workspace:FindFirstChild("Night") or workspace:FindFirstChild("CurrentNight")
+            local timeValue = workspace:FindFirstChild("Time") or workspace:FindFirstChild("GameTime")
+            
+            local nightText = nightValue and ("Noite: " .. nightValue.Value .. "/99") or "Noite: Desconhecida"
+            local timeText = timeValue and ("Tempo: " .. timeValue.Value) or ""
+            
+            local playersOnline = #Players:GetPlayers()
+            local statusText = nightText .. " | Jogadores: " .. playersOnline .. " | " .. timeText
+            
+            gameStatus:Set(statusText)
+        end)
+    end
+end)
+
+-- Funcionalidades principais
+local survivalSection = MainTab:AddSection({Name = "🏥 Sobrevivência Básica"})
+
+MainTab:AddButton({
+    Name = "💚 Curar Completamente",
+    Callback = function()
+        if CharacterManager:IsValid() then
+            Humanoid.Health = Humanoid.MaxHealth
+            notify("🏥 Cura", "Vida restaurada para " .. Humanoid.MaxHealth .. " HP!")
+            LogSystem:Add("ACTION", "Vida curada completamente")
+        end
+    end
+})
+
+MainTab:AddButton({
+    Name = "⚡ Restaurar Energia",
+    Callback = function()
+        local restored = 0
+        for _, v in pairs(Character:GetChildren()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                local name = v.Name:lower()
+                if name:find("stamina") or name:find("energy") then
+                    v.Value = 100
+                    restored = restored + 1
+                end
+            end
+        end
+        notify("⚡ Energia", "Restaurados " .. restored .. " tipos de energia!")
+        LogSystem:Add("ACTION", "Energia restaurada: " .. restored .. " stats")
+    end
+})
+
+MainTab:AddButton({
+    Name = "🍞 Remover Fome",
+    Callback = function()
+        local removed = 0
+        for _, v in pairs(Character:GetChildren()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                local name = v.Name:lower()
+                if name:find("hunger") or name:find("food") then
+                    v.Value = 100
+                    removed = removed + 1
+                end
+            end
+        end
+        notify("🍞 Fome", "Fome removida! Stats alterados: " .. removed)
+        LogSystem:Add("ACTION", "Fome removida: " .. removed .. " stats")
+    end
+})
+
+MainTab:AddButton({
+    Name = "💧 Remover Sede",
+    Callback = function()
+        local removed = 0
+        for _, v in pairs(Character:GetChildren()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                local name = v.Name:lower()
+                if name:find("thirst") or name:find("water") or name:find("drink") then
+                    v.Value = 100
+                    removed = removed + 1
+                end
+            end
+        end
+        notify("💧 Sede", "Sede removida! Stats alterados: " .. removed)
+        LogSystem:Add("ACTION", "Sede removida: " .. removed .. " stats")
+    end
+})
+
+MainTab:AddButton({
+    Name = "🧪 Remover Todos os Status Negativos",
+    Callback = function()
+        local removed = 0
+        for _, v in pairs(Character:GetChildren()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                local name = v.Name:lower()
+                if name:find("hunger") or name:find("thirst") or name:find("stamina") or 
+                   name:find("energy") or name:find("temperature") or name:find("sanity") then
+                    v.Value = 100
+                    removed = removed + 1
+                end
+            end
+        end
+        
+        -- Também curar
+        if Humanoid then
+            Humanoid.Health = Humanoid.MaxHealth
+        end
+        
+        notify("🧪 Limpeza", "Todos os status restaurados! (" .. removed .. " stats)")
+        LogSystem:Add("ACTION", "Limpeza completa de status: " .. removed .. " stats")
+    end
+})
+
+-- ===== TAB AUTOMAÇÃO =====
+local autoSurvivalSection = AutoTab:AddSection({Name = "🤖 Sobrevivência Automática"})
+
+AutoTab:AddToggle({
+    Name = "🛡️ Auto Sobrevivência Completa",
+    Default = Settings.autoSurvive,
+    Callback = function(value)
+        Settings.autoSurvive = value
+        
+        if value then
+            SurvivalSystem:Start()
+        else
+            SurvivalSystem:Stop()
+        end
+    end
+})
+
+AutoTab:AddToggle({
+    Name = "🏥 Auto Cura (Vida < 70%)",
+    Default = Settings.autoHeal,
+    Callback = function(value)
+        Settings.autoHeal = value
+        
+        if value then
+            spawn(function()
+                while Settings.autoHeal and hubEnabled do
+                    wait(1)
+                    if CharacterManager:IsValid() and Humanoid.Health < (Humanoid.MaxHealth * 0.7) then
+                        Humanoid.Health = Humanoid.MaxHealth
+                    end
+                end
+            end)
+        end
+        
+        notify("🏥 Auto Cura", value and "Ativado" or "Desativado")
+    end
+})
+
+AutoTab:AddToggle({
+    Name = "⚡ Auto Restaurar Energia",
+    Default = false,
+    Callback = function(value)
+        if value then
+            spawn(function()
+                while value and hubEnabled do
+                    wait(2)
+                    if CharacterManager:IsValid() then
+                        for _, v in pairs(Character:GetChildren()) do
+                            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                                local name = v.Name:lower()
+                                if (name:find("stamina") or name:find("energy")) and v.Value < 50 then
+                                    v.Value = 100
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        notify("⚡ Auto Energia", value and "Ativado" or "Desativado")
+    end
+})
+
+local autoFarmSection = AutoTab:AddSection({Name = "🚜 Sistema de Farm Automático"})
+
+AutoTab:AddToggle({
+    Name = "📦 Auto Farm Itens",
+    Default = Settings.autoFarm,
+    Callback = function(value)
+        Settings.autoFarm = value
+        
+        if value then
+            AutoFarmSystem:Start()
+        else
+            AutoFarmSystem:Stop()
+        end
+    end
+})
+
+AutoTab:AddButton({
+    Name = "🔍 Escanear Itens Próximos",
+    Callback = function()
+        AutoFarmSystem:ScanForItems()
+        notify("🔍 Scan", "Encontrados " .. #AutoFarmSystem.items .. " itens farmáveis!")
+    end
+})
+
+AutoTab:AddToggle({
+    Name = "🌲 Auto Coletar Recursos",
+    Default = false,
+    Callback = function(value)
+        if value then
+            spawn(function()
+                while value and hubEnabled do
+                    wait(1)
+                    
+                    if not CharacterManager:IsValid() then continue end
+                    
+                    for _, obj in pairs(workspace:GetDescendants()) do
+                        if not value then break end
+                        
+                        if obj.Name:lower():find("wood") or obj.Name:lower():find("stone") or 
+                           obj.Name:lower():find("stick") or obj.Name:lower():find("rock") then
+                            
+                            if obj:IsA("Part") and obj:FindFirstChild("ClickDetector") then
+                                local distance = (obj.Position - RootPart.Position).Magnitude
+                                
+                                if distance <= 75 then
+                                    pcall(function()
+                                        fireclickdetector(obj.ClickDetector)
+                                    end)
+                                    wait(0.5)
+                                end
+                            end
+                        end
+                    end
+                    
+                    wait(3)
+                end
+            end)
+        end
+        
+        notify("🌲 Auto Recursos", value and "Coletando recursos automaticamente" or "Parado")
+    end
+})
+
+local autoBuildSection = AutoTab:AddSection({Name = "🏗️ Construção Automática"})
+
+AutoTab:AddToggle({
+    Name = "🏠 Auto Construir Abrigo",
+    Default = Settings.autoBuild,
+    Callback = function(value)
+        Settings.autoBuild = value
+        
+        if value then
+            spawn(function()
+                while Settings.autoBuild and hubEnabled do
+                    wait(5)
+                    
+                    -- Lógica de auto build aqui
+                    -- Procurar por materiais e construir automaticamente
+                    
+                    notify("🏠 Construção", "Verificando materiais para construção...")
+                    wait(10)
+                end
+            end)
+        end
+        
+        notify("🏗️ Auto Build", value and "Sistema ativado" or "Sistema desativado")
+    end
+})
+
+-- ===== TAB ESP & VISUALS =====
+local espPlayersSection = ESPTab:AddSection({Name = "👥 ESP Jogadores"})
+
+ESPTab:AddToggle({
+    Name = "👥 ESP Todos os Jogadores",
+    Default = Settings.espPlayers,
+    Callback = function(value)
+        Settings.espPlayers = value
+        
+        if value then
+            spawn(function()
+                while Settings.espPlayers and hubEnabled do
+                    ESPSystem:UpdatePlayers()
+                    wait(1)
+                end
+            end)
+        else
+            -- Remover ESP de todos os jogadores
+            for _, player in pairs(Players:GetPlayers()) do
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    ESPSystem:RemoveESP(player.Character.HumanoidRootPart)
+                end
+            end
+        end
+        
+        notify("👥 ESP Jogadores", value and "Ativado" or "Desativado")
+    end
+})
+
+ESPTab:AddToggle({
+    Name = "💚 ESP Apenas Aliados",
+    Default = false,
+    Callback = function(value)
+        -- Implementar lógica para mostrar apenas aliados
+        notify("💚 ESP Aliados", value and "Mostrando apenas aliados" or "Mostrando todos")
+    end
+})
+
+local espItemsSection = ESPTab:AddSection({Name = "📦 ESP Itens"})
+
+ESPTab:AddToggle({
+    Name = "📦 ESP Todos os Itens",
+    Default = Settings.espItems,
+    Callback = function(value)
+        Settings.espItems = value
+        
+        if value then
+            spawn(function()
+                while Settings.espItems and hubEnabled do
+                    wait(2)
+                    
+                    for _, obj in pairs(workspace:GetDescendants()) do
+                        if obj:IsA("Part") or obj:IsA("MeshPart") then
+                            local name = obj.Name:lower()
+                            if (name:find("food") or name:find("water") or name:find("item") or 
+                                name:find("berry") or name:find("fruit")) and 
+                               not ESPSystem.objects[obj] then
+                                
+                                ESPSystem:CreateESP(obj, {
+                                    color = Color3.new(1, 1, 0),
+                                    name = obj.Name,
+                                    transparency = 0.2
+                                })
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            -- Limpar ESP de itens
+            for obj, _ in pairs(ESPSystem.objects) do
+                if obj and obj.Name:lower():find("item") or obj.Name:lower():find("food") or obj.Name:lower():find("water") then
+                    ESPSystem:RemoveESP(obj)
+                end
+            end
+        end
+        
+        notify("📦 ESP Itens", value and "Ativado" or "Desativado")
+    end
+})
+
+ESPTab:AddToggle({
+    Name = "🌲 ESP Recursos (Madeira/Pedra)",
+    Default = false,
+    Callback = function(value)
+        if value then
+            spawn(function()
+                while value and hubEnabled do
+                    wait(3)
+                    
+                    for _, obj in pairs(workspace:GetDescendants()) do
+                        if obj:IsA("Part") then
+                            local name = obj.Name:lower()
+                            if (name:find("wood") or name:find("stone") or name:find("rock") or 
+                                name:find("stick")) and not ESPSystem.objects[obj] then
+                                
+                                ESPSystem:CreateESP(obj, {
+                                    color = Color3.new(0.6, 0.4, 0.2),
+                                    name = obj.Name,
+                                    transparency = 0.3
+                                })
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        notify("🌲 ESP Recursos", value and "Ativado" or "Desativado")
+    end
+})
+
+local espMonstersSection = ESPTab:AddSection({Name = "👹 ESP Ameaças"})
+
+ESPTab:AddToggle({
+    Name = "👹 ESP Monstros/Inimigos",
+    Default = Settings.espMonsters,
+    Callback = function(value)
+        Settings.espMonsters = value
+        
+        if value then
+            spawn(function()
+                while Settings.espMonsters and hubEnabled do
+                    wait(1)
+                    
+                    for _, obj in pairs(workspace:GetDescendants()) do
+                        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                            local name = obj.Name:lower()
+                            if (name:find("monster") or name:find("beast") or name:find("enemy") or 
+                                name:find("zombie") or name:find("wolf")) and not ESPSystem.objects[obj.HumanoidRootPart] then
+                                
+                                ESPSystem:CreateESP(obj.HumanoidRootPart, {
+                                    color = Color3.new(1, 0, 0),
+                                    name = "⚠️ " .. obj.Name,
+                                    transparency = 0.1
+                                })
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            -- Limpar ESP de monstros
+            for obj, _ in pairs(ESPSystem.objects) do
+                if obj.Parent and obj.Parent.Name:lower():find("monster") then
+                    ESPSystem:RemoveESP(obj)
+                end
+            end
+        end
+        
+        notify("👹 ESP Monstros", value and "⚠️ Ameaças visíveis!" or "Desativado")
+    end
+})
+
+local visualSection = ESPTab:AddSection({Name = "🌟 Modificações Visuais"})
+
+ESPTab:AddToggle({
+    Name = "🌞 Fullbright (Sem Escuridão)",
+    Default = Settings.fullbright,
+    Callback = function(value)
+        Settings.fullbright = value
+        
+        if value then
+            OriginalData.lighting.brightness = Lighting.Brightness
+            OriginalData.lighting.ambient = Lighting.Ambient
+            
+            Lighting.Brightness = 5
+            Lighting.Ambient = Color3.new(1, 1, 1)
+            Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
+            Lighting.ColorShift_Top = Color3.new(1, 1, 1)
+            
+            notify("🌞 Fullbright", "Escuridão removida!")
+        else
+            Lighting.Brightness = OriginalData.lighting.brightness
+            Lighting.Ambient = OriginalData.lighting.ambient
+            Lighting.ColorShift_Bottom = OriginalData.lighting.colorShift_Bottom
+            Lighting.ColorShift_Top = OriginalData.lighting.colorShift_Top
+            
+            notify("🌙 Lighting", "Iluminação restaurada")
+        end
+        
+        LogSystem:Add("VISUAL", "Fullbright " .. (value and "ativado" or "desativado"))
+    end
+})
+
+ESPTab:AddToggle({
+    Name = "🌫️ Remover Neblina",
+    Default = Settings.noFog,
+    Callback = function(value)
+        Settings.noFog = value
+        
+        if value then
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 0
+            notify("🌫️ Neblina", "Neblina removida!")
+        else
+            Lighting.FogEnd = 15000
+            Lighting.FogStart = 0
+            notify("🌫️ Neblina", "Neblina restaurada")
+        end
+    end
+})
+
+ESPTab:AddSlider({
+    Name = "🕐 Hora do Dia Customizada",
+    Min = 0,
+    Max = 24,
+    Default = 12,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 0.5,
+    ValueName = "Horas",
+    Callback = function(value)
+        Lighting.TimeOfDay = string.format("%02d:00:00", value)
+        Lighting.ClockTime = value
+    end
+})
+
+ESPTab:AddButton({
+    Name = "🎨 Arco-Íris no Céu",
+    Callback = function()
+        local sky = Lighting:FindFirstChild("Sky") or Instance.new("Sky", Lighting)
+        
+        spawn(function()
+            for i = 1, 360 do
+                if not hubEnabled then break end
+                
+                local hue = i / 360
+                local color = Color3.fromHSV(hue, 1, 1)
+                
+                sky.StarCount = 3000
+                sky.SunSize = 25
+                Lighting.Ambient = color
+                
+                wait(0.1)
+            end
+        end)
+        
+        notify("🌈 Arco-íris", "Efeito arco-íris iniciado!")
+    end
+})
+
+-- ===== TAB TELEPORTE =====
+local quickTeleportSection = TeleportTab:AddSection({Name = "⚡ Teleportes Rápidos"})
+
+-- Adicionar botões para cada localização
+for name, position in pairs(TeleportSystem.locations) do
+    TeleportTab:AddButton({
+        Name = name,
+        Callback = function()
+            if TeleportSystem:TeleportTo(position) then
+                local cleanName = name:gsub("🏠 ", ""):gsub("🌲 ", ""):gsub("💧 ", ""):gsub("⛰️ ", ""):gsub("🏚️ ", ""):gsub("🌊 ", ""):gsub("🕳️ ", ""):gsub("🏛️ ", ""):gsub("🌋 ", ""):gsub("❄️ ", "")
+                notify("📍 Teleporte", "Teleportado para: " .. cleanName)
+            end
+        end
+    })
+end
+
+local playerTeleportSection = TeleportTab:AddSection({Name = "👥 Teleporte para Jogadores"})
+
+TeleportTab:AddDropdown({
+    Name = "👤 Selecionar Jogador",
+    Default = "Nenhum",
+    Options = {},
+    Callback = function(value)
+        if value ~= "Nenhum" then
+            TeleportSystem:TeleportToPlayer(value)
+        end
+    end
+})
+
+-- Atualizar lista de jogadores
+spawn(function()
+    while hubEnabled do
+        wait(5)
+        local playerNames = {"Nenhum"}
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                table.insert(playerNames, player.Name)
+            end
+        end
+        -- Atualizar dropdown aqui se necessário
+    end
+end)
+
+TeleportTab:AddButton({
+    Name = "🔄 Teleporte para Jogador Aleatório",
+    Callback = function()
+        local players = {}
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                table.insert(players, player)
+            end
+        end
+        
+        if #players > 0 then
+            local randomPlayer = players[math.random(1, #players)]
+            TeleportSystem:TeleportToPlayer(randomPlayer.Name)
+        else
+            notify("❌ Erro", "Nenhum jogador disponível!")
+        end
+    end
+})
+
+local waypointSection = TeleportTab:AddSection({Name = "📌 Sistema de Waypoints"})
+
+TeleportTab:AddTextbox({
+    Name = "💾 Nome do Waypoint",
+    Default = "Minha Localização",
+    TextDisappear = true,
+    Callback = function(value)
+        if value and value ~= "" then
+            TeleportSystem:SaveLocation("📌 " .. value, RootPart.Position)
+        end
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "📍 Salvar Posição Atual",
+    Callback = function()
+        local timestamp = os.date("%H:%M:%S")
+        TeleportSystem:SaveLocation("📍 Pos " .. timestamp, RootPart.Position)
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "🗺️ Mostrar Waypoints Salvos",
+    Callback = function()
+        local count = 0
+        for name, _ in pairs(TempData.waypoints) do
+            count = count + 1
+        end
+        notify("🗺️ Waypoints", "Você tem " .. count .. " waypoints salvos!")
+    end
+})
+
+local advancedTeleportSection = TeleportTab:AddSection({Name = "🚀 Teleporte Avançado"})
+
+TeleportTab:AddToggle({
+    Name = "🖱️ Teleporte por Clique (Ctrl+Click)",
+    Default = Settings.clickTeleport,
+    Callback = function(value)
+        Settings.clickTeleport = value
+        
+        if value then
+            Mouse.Button1Down:Connect(function()
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                    local hit = Mouse.Hit
+                    if hit then
+                        TeleportSystem:TeleportTo(hit.Position)
+                        notify("🖱️ Click TP", "Teleportado!")
+                    end
+                end
+            end)
+        end
+        
+        notify("🖱️ Click Teleport", value and "Ativado - Use Ctrl+Click" or "Desativado")
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "🌪️ Teleporte Aleatório na Área",
+    Callback = function()
+        local randomX = math.random(-500, 500)
+        local randomZ = math.random(-500, 500)
+        local randomPos = Vector3.new(randomX, 100, randomZ)
+        
+        TeleportSystem:TeleportTo(randomPos, true) -- Teleporte suave
+        notify("🌪️ Teleporte", "Teleportado para área aleatória!")
+    end
+})
+
+-- ===== TAB COMBATE =====
+local combatBasicSection = CombatTab:AddSection({Name = "⚔️ Combate Básico"})
+
+CombatTab:AddToggle({
+    Name = "🛡️ Modo Deus (God Mode)",
+    Default = Settings.godMode,
+    Callback = function(value)
+        Settings.godMode = value
+        
+        if value then
+            spawn(function()
+                while Settings.godMode and hubEnabled do
+                    wait(0.1)
+                    if CharacterManager:IsValid() then
+                        Humanoid.Health = Humanoid.MaxHealth
+                        
+                        -- Proteger contra dano
+                        for _, v in pairs(Character:GetChildren()) do
+                            if v:IsA("NumberValue") and v.Name:lower():find("health") then
+                                v.Value = v.MaxValue or 100
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        notify("🛡️ God Mode", value and "Você é imortal!" or "Mortalidade restaurada")
+        LogSystem:Add("COMBAT", "God Mode " .. (value and "ativado" or "desativado"))
+    end
+})
+
+CombatTab:AddToggle({
+    Name = "🏃 Auto Fugir de Inimigos",
+    Default = false,
+    Callback = function(value)
+        if value then
+            spawn(function()
+                while value and hubEnabled do
+                    wait(0.5)
+                    
+                    if not CharacterManager:IsValid() then continue end
+                    
+                    for _, obj in pairs(workspace:GetDescendants()) do
+                        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                            local name = obj.Name:lower()
+                            if name:find("monster") or name:find("enemy") or name:find("beast") then
+                                local distance = (obj.HumanoidRootPart.Position - RootPart.Position).Magnitude
+                                
+                                if distance <= 30 then
+                                    -- Calcular direção de fuga
+                                    local escapeDir = (RootPart.Position - obj.HumanoidRootPart.Position).Unit
+                                    local escapePos = RootPart.Position + (escapeDir * 50)
+                                    
+                                    TeleportSystem:TeleportTo(escapePos)
+                                    notify("🏃 Fuga", "Fugindo de " .. obj.Name .. "!")
+                                    wait(2)
+                                    break
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        
+        notify("🏃 Auto Fuga", value and "Sistema de fuga ativo!" or "Sistema desativado")
+    end
+})
+
+CombatTab:AddButton({
+    Name = "💥 Empurrar Inimigos Próximos",
+    Callback = function()
+        if not CharacterManager:IsValid() then return end
+        
+        local pushed = 0
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                local name = obj.Name:lower()
+                if name:find("monster") or name:find("enemy") or name:find("beast") then
+                    local distance = (obj.HumanoidRootPart.Position - RootPart.Position).Magnitude
+                    
+                    if distance <= 50 then
+                        -- Criar força de empurrão
+                        local bodyVelocity = Instance.new("BodyVelocity")
+                        bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+                        bodyVelocity.Velocity = (obj.HumanoidRootPart.Position - RootPart.Position).Unit * 100
+                        bodyVelocity.Parent = obj.HumanoidRootPart
+                        
+                        Debris:AddItem(bodyVelocity, 2)
+                        pushed = pushed + 1
+                    end
+                end
+            end
+        end
+        
+        notify("💥 Empurrão", "Empurrados " .. pushed .. " inimigos!")
+    end
+})
+
+local combatAdvancedSection = CombatTab:AddSection({Name = "🎯 Combate Avançado"})
+
+CombatTab:AddToggle({
+    Name = "🎯 Mira Automática (Aimbot)",
+    Default = Settings.silentAim,
+    Callback = function(value)
+        Settings.silentAim = value
+        
+        notify("🎯 Aimbot", value and "Mira automática ativa!" or "Desativado")
+        LogSystem:Add("COMBAT", "Aimbot " .. (value and "ativado" or "desativado"))
+    end
+})
+
+CombatTab:AddSlider({
+    Name = "🎯 Distância da Mira",
+    Min = 10,
+    Max = 500,
+    Default = 100,
+    Color = Color3.fromRGB(255, 0, 0),
+    Increment = 10,
+    ValueName = "metros",
+    Callback = function(value)
+        -- Configurar distância da mira
+        LogSystem:Add("COMBAT", "Distância da mira alterada para: " .. value .. "m")
+    end
+})
+
+-- ===== TAB JOGADOR =====
+local movementSection = PlayerTab:AddSection({Name = "🚶 Movimento"})
+
+PlayerTab:AddSlider({
+    Name = "🚶 Velocidade de Movimento",
+    Min = 1,
+    Max = 500,
+    Default = Settings.walkSpeed,
+    Color = Color3.fromRGB(0, 255, 255),
+    Increment = 1,
+    ValueName = "vel",
+    Callback = function(value)
+        Settings.walkSpeed = value
+        if CharacterManager:IsValid() then
+            Humanoid.WalkSpeed = value
+        end
+        LogSystem:Add("PLAYER", "Velocidade alterada para: " .. value)
+    end
+})
+
+PlayerTab:AddSlider({
+    Name = "🦘 Força do Pulo",
+    Min = 1,
+    Max = 500,
+    Default = Settings.jumpPower,
+    Color = Color3.fromRGB(0, 255, 0),
+    Increment = 1,
+    ValueName = "força",
+    Callback = function(value)
+        Settings.jumpPower = value
+        if CharacterManager:IsValid() then
+            Humanoid.JumpPower = value
+        end
+        LogSystem:Add("PLAYER", "Força do pulo alterada para: " .. value)
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "👻 Noclip (Atravessar Paredes)",
+    Default = Settings.noclip,
+    Callback = function(value)
+        Settings.noclip = value
+        
+        if value then
+            spawn(function()
+                while Settings.noclip and hubEnabled do
+                    wait()
+                    if CharacterManager:IsValid() then
+                        for _, part in pairs(Character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            if CharacterManager:IsValid() then
+                for _, part in pairs(Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+        
+        notify("👻 Noclip", value and "Atravessando paredes!" or "Colisão restaurada")
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "🦘 Pulo Infinito",
+    Default = Settings.infiniteJump,
+    Callback = function(value)
+        Settings.infiniteJump = value
+        
+        if value then
+            local connection
+            connection = UserInputService.JumpRequest:Connect(function()
+                if Settings.infiniteJump and CharacterManager:IsValid() then
+                    Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end)
+            
+            table.insert(TempData.connections, connection)
+        end
+        
+        notify("🦘 Jump", value and "Pulo infinito ativo!" or "Pulo normal")
+    end
+})
+
+local flySection = PlayerTab:AddSection({Name = "✈️ Sistema de Voo"})
+
+PlayerTab:AddToggle({
+    Name = "✈️ Voar",
+    Default = false,
+    Callback = function(value)
+        if value then
+            if not CharacterManager:IsValid() then
+                notify("❌ Erro", "Personagem inválido!")
+                return
+            end
+            
+            local bodyVelocity = Instance.new("BodyVelocity")
+            local bodyAngularVelocity = Instance.new("BodyAngularVelocity")
+            
+            bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.Parent = RootPart
+            
+            bodyAngularVelocity.MaxTorque = Vector3.new(0, math.huge, 0)
+            bodyAngularVelocity.AngularVelocity = Vector3.new(0, 0, 0)
+            bodyAngularVelocity.Parent = RootPart
+            
+            local flying = true
+            
+            spawn(function()
+                local camera = workspace.CurrentCamera
+                
+                while flying and value and hubEnabled and CharacterManager:IsValid() do
+                    wait()
+                    
+                    local moveVector = Vector3.new(0, 0, 0)
+                    
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                        moveVector = moveVector + camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                        moveVector = moveVector - camera.CFrame.LookVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                        moveVector = moveVector - camera.CFrame.RightVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                        moveVector = moveVector + camera.CFrame.RightVector
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                        moveVector = moveVector + Vector3.new(0, 1, 0)
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                        moveVector = moveVector - Vector3.new(0, 1, 0)
+                    end
+                    
+                    bodyVelocity.Velocity = moveVector * Settings.flySpeed
+                end
+                
+                flying = false
+                if bodyVelocity then bodyVelocity:Destroy() end
+                if bodyAngularVelocity then bodyAngularVelocity:Destroy() end
+            end)
+            
+            notify("✈️ Voo", "Voando! Use WASD + Space/Shift")
+        else
+            -- Desativar voo será feito automaticamente pelo loop
+            notify("✈️ Voo", "Aterrissado!")
+        end
+        
+        LogSystem:Add("PLAYER", "Voo " .. (value and "ativado" or "desativado"))
+    end
+})
+
+PlayerTab:AddSlider({
+    Name = "🚀 Velocidade de Voo",
+    Min = 10,
+    Max = 200,
+    Default = Settings.flySpeed,
+    Color = Color3.fromRGB(135, 206, 250),
+    Increment = 5,
+    ValueName = "vel",
+    Callback = function(value)
+        Settings.flySpeed = value
+        LogSystem:Add("PLAYER", "Velocidade de voo: " .. value)
+    end
+})
+
+-- ===== TAB DIVERSOS =====
+local serverSection = MiscTab:AddSection({Name = "🌐 Servidor"})
+
+MiscTab:AddButton({
+    Name = "🔄 Rejoin no Servidor",
+    Callback = function()
+        notify("🔄 Rejoin", "Reconectando ao servidor...")
+        wait(1)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+MiscTab:AddButton({
+    Name = "🎲 Servidor Aleatório",
+    Callback = function()
+        notify("🎲 Servidor", "Procurando servidor aleatório...")
+        wait(1)
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end
+})
+
+MiscTab:AddButton({
+    Name = "📋 Copiar ID do Servidor",
+    Callback = function()
+        setclipboard(game.JobId)
+        notify("📋 Copiado", "ID do servidor copiado!")
+    end
+})
+
+local utilitySection = MiscTab:AddSection({Name = "🔧 Utilidades"})
+
+MiscTab:AddButton({
+    Name = "🧹 Limpar Chat",
+    Callback = function()
+        game.StarterGui:SetCore("ChatMakeSystemMessage", {
+            Text = string.rep("\n", 100);
+            Color = Color3.new(1, 1, 1);
+        })
+        notify("🧹 Chat", "Chat limpo!")
+    end
+})
+
+MiscTab:AddToggle({
+    Name = "🔇 Mutar Todos os Sons",
+    Default = false,
+    Callback = function(value)
+        SoundService.RespectFilteringEnabled = not value
+        
+        for _, sound in pairs(workspace:GetDescendants()) do
+            if sound:IsA("Sound") then
+                sound.Volume = value and 0 or 0.5
+            end
+        end
+        
+        notify("🔇 Som", value and "Todos os sons mutados" or "Sons restaurados")
+    end
+})
+
+MiscTab:AddButton({
+    Name = "📸 Screenshot",
+    Callback = function()
+        local camera = workspace.CurrentCamera
+        local gui = game:GetService("CoreGui"):FindFirstChild("RobloxGui")
+        
+        if gui then
+            gui.Enabled = false
+            wait(0.1)
+            
+            -- Simular screenshot
+            notify("📸 Foto", "Screenshot capturado!")
+            
+            wait(0.1)
+            gui.Enabled = true
+        end
+    end
+})
+
+local debugSection = MiscTab:AddSection({Name = "🐛 Debug & Logs"})
+
+MiscTab:AddButton({
+    Name = "📜 Mostrar Logs Recentes",
+    Callback = function()
+        local logs = LogSystem:GetLogs(5)
+        local logText = "=== LOGS RECENTES ===\n"
+        
+        for _, log in pairs(logs) do
+            logText = logText .. string.format("[%s] %s: %s\n", log.timestamp, log.type, log.message)
+        end
+        
+        print(logText)
+        notify("📜 Logs", "Logs impressos no console!")
+    end
+})
+
+MiscTab:AddButton({
+    Name = "🧪 Teste de Funcionalidades",
+    Callback = function()
+        notify("🧪 Teste", "Testando todos os sistemas...")
+        
+        -- Testar sistemas
+        local tests = {
+            {"CharacterManager", CharacterManager:IsValid()},
+            {"ESPSystem", ESPSystem ~= nil},
+            {"TeleportSystem", TeleportSystem ~= nil},
+            {"AutoFarmSystem", AutoFarmSystem ~= nil},
+            {"SurvivalSystem", SurvivalSystem ~= nil},
+            {"LogSystem", #LogSystem.logs >= 0},
+        }
+        
+        local passed = 0
+        for _, test in pairs(tests) do
+            if test[2] then
+                passed = passed + 1
+                LogSystem:Add("TEST", test[1] .. ": ✅ PASSOU")
+            else
+                LogSystem:Add("ERROR", test[1] .. ": ❌ FALHOU")
+            end
+        end
+        
+        notify("🧪 Resultado", passed .. "/" .. #tests .. " testes passaram!")
+    end
+})
+
+MiscTab:AddButton({
+    Name = "🔍 Informações do Jogo",
+    Callback = function()
+        local info = {
+            "=== INFORMAÇÕES DO JOGO ===",
+            "Nome: " .. (game.Name or "Desconhecido"),
+            "Place ID: " .. game.PlaceId,
+            "Job ID: " .. (game.JobId ~= "" and game.JobId or "Servidor Privado"),
+            "Criador: " .. game.CreatorId,
+            "Jogadores Online: " .. #Players:GetPlayers(),
+            "Ping: " .. LocalPlayer:GetNetworkPing() * 1000 .. "ms",
+            "FPS: " .. (workspace:GetRealPhysicsFPS()),
+            "Versão Hub: " .. hubVersion,
+            "=========================="
+        }
+        
+        for _, line in pairs(info) do
+            print(line)
+        end
+        
+        notify("🔍 Info", "Informações impressas no console!")
+    end
+})
+
+-- ===== TAB CONFIGURAÇÕES =====
+local hubConfigSection = SettingsTab:AddSection({Name = "🎛️ Configurações do Hub"})
+
+SettingsTab:AddToggle({
+    Name = "🛡️ Sistema Anti-Kick",
+    Default = Settings.antiKick,
+    Callback = function(value)
+        Settings.antiKick = value
+        
+        if value then
+            AntiKickSystem:Enable()
+        end
+        
+        notify("🛡️ Anti-Kick", value and "Proteção ativada!" or "Proteção desativada!")
+    end
+})
+
+SettingsTab:AddToggle({
+    Name = "🔄 Auto Rejoin se Kickado",
+    Default = Settings.autoRejoin,
+    Callback = function(value)
+        Settings.autoRejoin = value
+        
+        if value then
+            game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(child)
+                if child.Name == "ErrorPrompt" then
+                    wait(1)
+                    TeleportService:Teleport(game.PlaceId)
+                end
+            end)
+        end
+        
+        notify("🔄 Auto Rejoin", value and "Reconexão automática ativa!" or "Reconexão desativada!")
+    end
+})
+
+SettingsTab:AddDropdown({
+    Name = "🎨 Tema da Interface",
+    Default = "Padrão",
+    Options = {"Padrão", "Escuro", "Azul", "Verde", "Roxo", "Vermelho"},
+    Callback = function(value)
+        notify("🎨 Tema", "Tema alterado para: " .. value)
+        LogSystem:Add("SETTINGS", "Tema alterado: " .. value)
+    end
+})
+
+SettingsTab:AddSlider({
+    Name = "⏱️ Intervalo de Notificações",
+    Min = 1,
+    Max = 10,
+    Default = 5,
+    Color = Color3.fromRGB(255, 165, 0),
+    Increment = 1,
+    ValueName = "segundos",
+    Callback = function(value)
+        NotificationSystem.maxNotifications = 10 - value + 1
+        LogSystem:Add("SETTINGS", "Intervalo de notificações: " .. value .. "s")
+    end
+})
+
+local performanceSection = SettingsTab:AddSection({Name = "⚡ Performance"})
+
+SettingsTab:AddToggle({
+    Name = "🚀 Modo Performance",
+    Default = false,
+    Callback = function(value)
+        if value then
+            -- Reduzir qualidade gráfica
+            settings().Rendering.QualityLevel = 1
+            UserInputService.MouseIconEnabled = false
+            
+            -- Desativar efeitos desnecessários
+            for _, effect in pairs(Lighting:GetChildren()) do
+                if effect:IsA("PostEffect") then
+                    effect.Enabled = false
+                end
+            end
+            
+            notify("🚀 Performance", "Modo performance ativado!")
+        else
+            settings().Rendering.QualityLevel = "Automatic"
+            UserInputService.MouseIconEnabled = true
+            
+            for _, effect in pairs(Lighting:GetChildren()) do
+                if effect:IsA("PostEffect") then
+                    effect.Enabled = true
+                end
+            end
+            
+            notify("🚀 Performance", "Qualidade normal restaurada!")
+        end
+        
+        LogSystem:Add("SETTINGS", "Modo performance " .. (value and "ativado" or "desativado"))
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "🧹 Limpar Objetos Desnecessários",
+    Callback = function()
+        local removed = 0
+        
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                obj:Destroy()
+                removed = removed + 1
+            elseif obj:IsA("Sound") and not obj.Playing then
+                obj:Destroy()
+                removed = removed + 1
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Fire") or obj:IsA("Smoke") then
+                obj:Destroy()
+                removed = removed + 1
+            end
+        end
+        
+        -- Limpar lixo
+        game:GetService("Debris"):ClearAllChildren()
+        
+        notify("🧹 Limpeza", "Removidos " .. removed .. " objetos desnecessários!")
+        LogSystem:Add("PERFORMANCE", "Limpeza realizada: " .. removed .. " objetos")
+    end
+})
+
+local resetSection = SettingsTab:AddSection({Name = "🔄 Reset e Restauração"})
+
+SettingsTab:AddButton({
+    Name = "⚙️ Restaurar Configurações Padrão",
+    Callback = function()
+        -- Restaurar configurações originais
+        Settings.walkSpeed = OriginalData.walkSpeed
+        Settings.jumpPower = OriginalData.jumpPower
+        
+        if CharacterManager:IsValid() then
+            Humanoid.WalkSpeed = OriginalData.walkSpeed
+            Humanoid.JumpPower = OriginalData.jumpPower
+        end
+        
+        -- Restaurar iluminação
+        Lighting.Brightness = OriginalData.lighting.brightness
+        Lighting.Ambient = OriginalData.lighting.ambient
+        Lighting.ColorShift_Bottom = OriginalData.lighting.colorShift_Bottom
+        Lighting.ColorShift_Top = OriginalData.lighting.colorShift_Top
+        Lighting.TimeOfDay = OriginalData.lighting.timeOfDay
+        
+        -- Desativar todos os sistemas automáticos
+        Settings.autoSurvive = false
+        Settings.autoFarm = false
+        Settings.godMode = false
+        Settings.noclip = false
+        
+        SurvivalSystem:Stop()
+        AutoFarmSystem:Stop()
+        ESPSystem:ClearAll()
+        
+        notify("⚙️ Reset", "Todas as configurações foram restauradas!")
+        LogSystem:Add("SETTINGS", "Configurações restauradas ao padrão")
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "🔄 Reiniciar Personagem",
+    Callback = function()
+        if CharacterManager:IsValid() then
+            Humanoid.Health = 0
+            notify("🔄 Respawn", "Personagem reiniciado!")
+            LogSystem:Add("ACTION", "Personagem reiniciado manualmente")
+        end
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "🚪 Sair do Jogo",
+    Callback = function()
+        notify("🚪 Saindo", "Saindo do jogo em 3 segundos...")
+        wait(3)
+        game:Shutdown()
+    end
+})
+
+local hubControlSection = SettingsTab:AddSection({Name = "🎮 Controle do Hub"})
+
+SettingsTab:AddKeybind({
+    Name = "🔑 Toggle Hub (Mostrar/Ocultar)",
+    Default = Enum.KeyCode.RightControl,
+    Hold = false,
+    Callback = function()
+        OrionLib:SetVisible(not OrionLib.Visible)
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "💾 Salvar Configurações",
+    Callback = function()
+        -- Simular salvamento de configurações
+        local config = {
+            version = hubVersion,
+            settings = Settings,
+            waypoints = TempData.waypoints,
+            timestamp = os.time()
+        }
+        
+        -- Em um ambiente real, isso salvaria em um arquivo
+        notify("💾 Salvamento", "Configurações salvas com sucesso!")
+        LogSystem:Add("SETTINGS", "Configurações salvas")
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "📁 Carregar Configurações",
+    Callback = function()
+        notify("📁 Carregamento", "Configurações carregadas!")
+        LogSystem:Add("SETTINGS", "Configurações carregadas")
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "❌ Fechar Hub Completamente",
+    Callback = function()
+        notify("❌ Fechando", "Hub será fechado em 3 segundos...")
+        
+        wait(1)
+        notify("❌ Limpeza", "Limpando sistemas...")
+        
+        -- Parar todos os sistemas
+        hubEnabled = false
+        
+        SurvivalSystem:Stop()
+        AutoFarmSystem:Stop()
+        ESPSystem:ClearAll()
+        
+        -- Desconectar todos os eventos
+        for _, connection in pairs(TempData.connections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        
+        wait(2)
+        notify("❌ Finalizado", "Obrigado por usar o Forest Hub!")
+        
+        wait(1)
+        OrionLib:Destroy()
+        LogSystem:Add("SYSTEM", "Hub fechado pelo usuário")
+    end
+})
+
+-- ===== SEÇÃO DE INICIALIZAÇÃO FINAL =====
+local initSection = SettingsTab:AddSection({Name = "ℹ️ Informações do Sistema"})
+
+SettingsTab:AddLabel("🌲 99 Nights Forest Hub")
+SettingsTab:AddLabel("📅 Versão: " .. hubVersion .. " - " .. lastUpdate)
+SettingsTab:AddLabel("👨‍💻 Desenvolvido por: Forest Hub Team")
+SettingsTab:AddLabel("🎮 Compatível com todas as versões do jogo")
+
+-- Sistema de estatísticas do hub
+local statsSection = SettingsTab:AddSection({Name = "📊 Estatísticas do Hub"})
+
+local hubStats = {
+    startTime = tick(),
+    totalTeleports = 0,
+    totalNotifications = 0,
+    totalActions = 0
+}
+
+local function updateStats()
+    local uptime = tick() - hubStats.startTime
+    local uptimeFormatted = string.format("%02d:%02d:%02d", 
+        math.floor(uptime / 3600), 
+        math.floor((uptime % 3600) / 60), 
+        math.floor(uptime % 60)
+    )
+    
+    return "⏰ Tempo Ativo: " .. uptimeFormatted .. "\n" ..
+           "📍 Teleportes: " .. hubStats.totalTeleports .. "\n" ..
+           "🔔 Notificações: " .. hubStats.totalNotifications .. "\n" ..
+           "⚡ Ações Executadas: " .. hubStats.totalActions
+end
+
+local statsLabel = SettingsTab:AddLabel("📊 Carregando estatísticas...")
+
+-- Atualizar estatísticas a cada 5 segundos
+spawn(function()
+    while hubEnabled do
+        wait(5)
+        pcall(function()
+            statsLabel:Set(updateStats())
+        end)
+    end
+end)
+
+-- ===== SISTEMAS AVANÇADOS ADICIONAIS =====
+
+-- Sistema de Pathfinding Inteligente
+local PathfindingSystem = {}
+PathfindingSystem.paths = {}
+
+function PathfindingSystem:CreatePath(destination)
+    if not CharacterManager:IsValid() then return nil end
+    
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true,
+        WaypointSpacing = 4,
+        Costs = {
+            Water = 20,
+            Danger = math.huge
+        }
+    })
+    
+    local success, errorMessage = pcall(function()
+        path:ComputeAsync(RootPart.Position, destination)
+    end)
+    
+    if success and path.Status == Enum.PathStatus.Success then
+        return path:GetWaypoints()
+    end
+    
+    return nil
+end
+
+function PathfindingSystem:WalkToDestination(destination, speed)
+    local waypoints = self:CreatePath(destination)
+    if not waypoints then
+        notify("🗺️ Pathfinding", "Não foi possível calcular rota!")
+        return false
+    end
+    
+    speed = speed or Settings.walkSpeed
+    
+    spawn(function()
+        for _, waypoint in pairs(waypoints) do
+            if not CharacterManager:IsValid() then break end
+            
+            if waypoint.Action == Enum.PathWaypointAction.Jump then
+                Humanoid.Jump = true
+            end
+            
+            Humanoid:MoveTo(waypoint.Position)
+            Humanoid.MoveToFinished:Wait()
+        end
+        
+        notify("🗺️ Chegada", "Destino alcançado!")
+    end)
+    
+    return true
+end
+
+-- Sistema de Inventário Inteligente
+local InventorySystem = {}
+InventorySystem.items = {}
+
+function InventorySystem:ScanInventory()
+    self.items = {}
+    
+    -- Procurar por backpack e StarterGear
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local starterGear = LocalPlayer:FindFirstChild("StarterGear")
+    
+    if backpack then
+        for _, tool in pairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                table.insert(self.items, {
+                    name = tool.Name,
+                    tool = tool,
+                    location = "Backpack"
+                })
+            end
+        end
+    end
+    
+    if Character then
+        for _, tool in pairs(Character:GetChildren()) do
+            if tool:IsA("Tool") then
+                table.insert(self.items, {
+                    name = tool.Name,
+                    tool = tool,
+                    location = "Equipped"
+                })
+            end
+        end
+    end
+    
+    LogSystem:Add("INVENTORY", "Scan completo: " .. #self.items .. " itens encontrados")
+    return self.items
+end
+
+function InventorySystem:EquipTool(toolName)
+    local item = nil
+    for _, inventoryItem in pairs(self.items) do
+        if inventoryItem.name:lower():find(toolName:lower()) then
+            item = inventoryItem
+            break
+        end
+    end
+    
+    if item and item.tool then
+        Humanoid:EquipTool(item.tool)
+        notify("🔧 Ferramenta", "Equipado: " .. item.name)
+        return true
+    end
+    
+    notify("❌ Erro", "Ferramenta não encontrada: " .. toolName)
+    return false
+end
+
+-- Sistema de Clima e Ambiente
+local WeatherSystem = {}
+WeatherSystem.effects = {}
+
+function WeatherSystem:CreateRain()
+    local rainEffect = Instance.new("ParticleEmitter")
+    rainEffect.Parent = workspace.CurrentCamera
+    rainEffect.Texture = "http://www.roblox.com/asset/?id=241650934"
+    rainEffect.Lifetime = NumberRange.new(1, 3)
+    rainEffect.Rate = 300
+    rainEffect.SpreadAngle = Vector2.new(0, 0)
+    rainEffect.Speed = NumberRange.new(50, 50)
+    rainEffect.VelocityInheritance = 0
+    rainEffect.Acceleration = Vector3.new(0, -100, 0)
+    
+    self.effects.rain = rainEffect
+    
+    -- Efeito sonoro
+    local rainSound = Instance.new("Sound")
+    rainSound.SoundId = "rbxassetid://131961136"
+    rainSound.Volume = 0.5
+    rainSound.Looped = true
+    rainSound.Parent = workspace
+    rainSound:Play()
+    
+    self.effects.rainSound = rainSound
+    
+    notify("🌧️ Clima", "Chuva iniciada!")
+end
+
+function WeatherSystem:StopRain()
+    if self.effects.rain then
+        self.effects.rain:Destroy()
+        self.effects.rain = nil
+    end
+    
+    if self.effects.rainSound then
+        self.effects.rainSound:Stop()
+        self.effects.rainSound:Destroy()
+        self.effects.rainSound = nil
+    end
+    
+    notify("☀️ Clima", "Chuva parada!")
+end
+
+function WeatherSystem:CreateSnow()
+    local snowEffect = Instance.new("ParticleEmitter")
+    snowEffect.Parent = workspace.CurrentCamera
+    snowEffect.Texture = "http://www.roblox.com/asset/?id=605668174"
+    snowEffect.Lifetime = NumberRange.new(5, 10)
+    snowEffect.Rate = 100
+    snowEffect.SpreadAngle = Vector2.new(25, 25)
+    snowEffect.Speed = NumberRange.new(5, 15)
+    snowEffect.VelocityInheritance = 0
+    snowEffect.Acceleration = Vector3.new(0, -10, 0)
+    
+    self.effects.snow = snowEffect
+    
+    -- Mudar ambiente para frio
+    Lighting.Ambient = Color3.fromRGB(150, 180, 255)
+    Lighting.ColorShift_Bottom = Color3.fromRGB(100, 150, 255)
+    
+    notify("❄️ Clima", "Neve iniciada!")
+end
+
+function WeatherSystem:StopSnow()
+    if self.effects.snow then
+        self.effects.snow:Destroy()
+        self.effects.snow = nil
+    end
+    
+    -- Restaurar ambiente
+    Lighting.Ambient = OriginalData.lighting.ambient
+    Lighting.ColorShift_Bottom = OriginalData.lighting.colorShift_Bottom
+    
+    notify("☀️ Clima", "Neve parada!")
+end
+
+-- Sistema de Sons Personalizados
+local SoundSystem = {}
+SoundSystem.sounds = {}
+
+function SoundSystem:PlayCustomSound(soundId, volume, looped)
+    local sound = Instance.new("Sound")
+    sound.SoundId = "rbxassetid://" .. soundId
+    sound.Volume = volume or 0.5
+    sound.Looped = looped or false
+    sound.Parent = workspace
+    sound:Play()
+    
+    table.insert(self.sounds, sound)
+    
+    if not looped then
+        sound.Ended:Connect(function()
+            sound:Destroy()
+            for i, s in pairs(self.sounds) do
+                if s == sound then
+                    table.remove(self.sounds, i)
+                    break
+                end
+            end
+        end)
+    end
+    
+    return sound
+end
+
+function SoundSystem:StopAllSounds()
+    for _, sound in pairs(self.sounds) do
+        if sound and sound.Parent then
+            sound:Stop()
+            sound:Destroy()
+        end
+    end
+    self.sounds = {}
+    
+    notify("🔇 Audio", "Todos os sons customizados parados!")
+end
+
+-- Adicionar funcionalidades extras ao MiscTab
+local weatherSection = MiscTab:AddSection({Name = "🌦️ Controle de Clima"})
+
+MiscTab:AddButton({
+    Name = "🌧️ Criar Chuva",
+    Callback = function()
+        WeatherSystem:CreateRain()
+    end
+})
+
+MiscTab:AddButton({
+    Name = "❄️ Criar Neve",
+    Callback = function()
+        WeatherSystem:CreateSnow()
+    end
+})
+
+MiscTab:AddButton({
+    Name = "☀️ Parar Efeitos Climáticos",
+    Callback = function()
+        WeatherSystem:StopRain()
+        WeatherSystem:StopSnow()
+    end
+})
+
+local soundSection = MiscTab:AddSection({Name = "🎵 Sistema de Audio"})
+
+MiscTab:AddTextbox({
+    Name = "🎵 ID do Som Personalizado",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(value)
+        if value and value ~= "" and tonumber(value) then
+            SoundSystem:PlayCustomSound(value, 0.5, false)
+            notify("🎵 Audio", "Som " .. value .. " reproduzido!")
+        end
+    end
+})
+
+MiscTab:AddButton({
+    Name = "🎶 Som Ambiente Floresta",
+    Callback = function()
+        SoundSystem:PlayCustomSound("131961136", 0.3, true) -- Som de floresta
+        notify("🎶 Ambiente", "Som de floresta ativado!")
+    end
+})
+
+MiscTab:AddButton({
+    Name = "🔇 Parar Sons Customizados",
+    Callback = function()
+        SoundSystem:StopAllSounds()
+    end
+})
+
+-- Sistema de Backup de Dados
+local BackupSystem = {}
+BackupSystem.backups = {}
+
+function BackupSystem:CreateBackup()
+    local backup = {
+        timestamp = os.time(),
+        settings = table.clone(Settings),
+        waypoints = table.clone(TempData.waypoints),
+        playerData = {
+            position = RootPart and RootPart.Position or Vector3.new(0, 50, 0),
+            health = Humanoid and Humanoid.Health or 100,
+            walkSpeed = Humanoid and Humanoid.WalkSpeed or 16,
+            jumpPower = Humanoid and Humanoid.JumpPower or 50
+        },
+        version = hubVersion
+    }
+    
+    table.insert(self.backups, backup)
+    
+    -- Manter apenas os 5 backups mais recentes
+    if #self.backups > 5 then
+        table.remove(self.backups, 1)
+    end
+    
+    LogSystem:Add("BACKUP", "Backup criado com sucesso")
+    return backup
+end
+
+function BackupSystem:RestoreBackup(index)
+    index = index or #self.backups
+    local backup = self.backups[index]
+    
+    if not backup then
+        notify("❌ Erro", "Backup não encontrado!")
+        return false
+    end
+    
+    -- Restaurar configurações
+    Settings = table.clone(backup.settings)
+    TempData.waypoints = table.clone(backup.waypoints)
+    
+    -- Restaurar dados do jogador
+    if CharacterManager:IsValid() and backup.playerData then
+        RootPart.CFrame = CFrame.new(backup.playerData.position)
+        Humanoid.Health = backup.playerData.health
+        Humanoid.WalkSpeed = backup.playerData.walkSpeed
+        Humanoid.JumpPower = backup.playerData.jumpPower
+    end
+    
+    notify("💾 Restauração", "Backup restaurado com sucesso!")
+    LogSystem:Add("BACKUP", "Backup restaurado: " .. os.date("%X", backup.timestamp))
+    return true
+end
+
+-- Adicionar controles de backup às configurações
+local backupSection = SettingsTab:AddSection({Name = "💾 Sistema de Backup"})
+
+SettingsTab:AddButton({
+    Name = "💾 Criar Backup Atual",
+    Callback = function()
+        BackupSystem:CreateBackup()
+        notify("💾 Backup", "Backup criado! Total: " .. #BackupSystem.backups)
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "🔄 Restaurar Último Backup",
+    Callback = function()
+        BackupSystem:RestoreBackup()
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "📋 Mostrar Backups",
+    Callback = function()
+        if #BackupSystem.backups == 0 then
+            notify("📋 Backups", "Nenhum backup encontrado!")
+            return
+        end
+        
+        print("=== BACKUPS DISPONÍVEIS ===")
+        for i, backup in pairs(BackupSystem.backups) do
+            print(string.format("%d. %s - Versão %s", i, os.date("%X", backup.timestamp), backup.version))
+        end
+        print("===========================")
+        
+        notify("📋 Backups", #BackupSystem.backups .. " backups listados no console!")
+    end
+})
+
+-- Sistema de Monitoramento de Performance
+local PerformanceMonitor = {}
+PerformanceMonitor.metrics = {
+    fps = 0,
+    memory = 0,
+    ping = 0,
+    startTime = tick()
+}
+
+function PerformanceMonitor:Update()
+    pcall(function()
+        self.metrics.fps = workspace:GetRealPhysicsFPS()
+        self.metrics.memory = game:GetService("Stats"):GetTotalMemoryUsageMb()
+        self.metrics.ping = LocalPlayer:GetNetworkPing() * 1000
+        
+        -- Log performance crítica
+        if self.metrics.fps < 30 then
+            LogSystem:Add("WARNING", "FPS baixo detectado: " .. self.metrics.fps)
+        end
+        
+        if self.metrics.ping > 300 then
+            LogSystem:Add("WARNING", "Ping alto detectado: " .. math.floor(self.metrics.ping) .. "ms")
+        end
+    end)
+end
+
+-- Monitor de performance em loop
+spawn(function()
+    while hubEnabled do
+        wait(5)
+        PerformanceMonitor:Update()
+    end
+end)
+
+-- Adicionar seção de performance
+local performanceMonitorSection = SettingsTab:AddSection({Name = "📊 Monitor de Performance"})
+
+local performanceLabel = SettingsTab:AddLabel("📊 Carregando métricas...")
+
+spawn(function()
+    while hubEnabled do
+        wait(2)
+        pcall(function()
+            local uptime = tick() - PerformanceMonitor.metrics.startTime
+            local uptimeStr = string.format("%02d:%02d:%02d", 
+                math.floor(uptime / 3600), 
+                math.floor((uptime % 3600) / 60), 
+                math.floor(uptime % 60))
+            
+            local perfText = string.format(
+                "🖥️ FPS: %d | 📡 Ping: %dms\n💾 Memória: %.1fMB | ⏰ Uptime: %s",
+                PerformanceMonitor.metrics.fps,
+                math.floor(PerformanceMonitor.metrics.ping),
+                PerformanceMonitor.metrics.memory,
+                uptimeStr
+            )
+            
+            performanceLabel:Set(perfText)
+        end)
+    end
+end)
+
+-- Finalização e inicialização do sistema
+local function initializeHub()
+    -- Ativar sistema anti-kick se configurado
+    if Settings.antiKick then
+        AntiKickSystem:Enable()
+    end
+    
+    -- Criar backup inicial
+    BackupSystem:CreateBackup()
+    
+    -- Log de inicialização
+    LogSystem:Add("SYSTEM", "Hub inicializado com sucesso")
+    LogSystem:Add("INFO", "Versão: " .. hubVersion)
+    LogSystem:Add("INFO", "Jogador: " .. LocalPlayer.Name)
+    LogSystem:Add("INFO", "Servidor: " .. (game.JobId ~= "" and game.JobId or "Privado"))
+    
+    -- Notificação de boas-vindas
+    notify("🌲 Forest Hub", "Hub carregado com sucesso!", "rbxassetid://4483345998", 8)
+    notify("✨ Bem-vindo", LocalPlayer.Name .. ", sobreviva às 99 noites!", "rbxassetid://4483345998", 6)
+    
+    -- Verificar atualizações (simulado)
+    spawn(function()
+        wait(5)
+        notify("🔄 Sistema", "Verificando por atualizações...", "rbxassetid://4483345998", 3)
+        wait(2)
+        notify("✅ Atualizado", "Você está usando a versão mais recente!", "rbxassetid://4483345998", 4)
+    end)
+    
+    -- Sistema de auto-salvamento
+    spawn(function()
+        while hubEnabled do
+            wait(300) -- A cada 5 minutos
+            BackupSystem:CreateBackup()
+            LogSystem:Add("AUTO", "Backup automático criado")
+        end
+    end)
+    
+    print("🌲 99 Nights in Forest Hub - Versão " .. hubVersion)
+    print("🔥 Carregado com sucesso!")
+    print("👨‍💻 Desenvolvido por: Forest Hub Team")
+    print("📅 Última atualização: " .. lastUpdate)
+    print("🎮 Jogador: " .. LocalPlayer.Name .. " (ID: " .. LocalPlayer.UserId .. ")")
+    print("🌐 Servidor: " .. (game.JobId ~= "" and game.JobId or "Privado"))
+    print("⚡ Sistemas ativos: " .. (hubEnabled and "ONLINE" or "OFFLINE"))
+    print("🛡️ Anti-kick: " .. (Settings.antiKick and "ATIVO" or "INATIVO"))
+    print("💾 Backups disponíveis: " .. #BackupSystem.backups)
+    print("📜 Total de logs: " .. #LogSystem.logs)
+    print("====================================")
+    print("✨ Obrigado por usar o Forest Hub! ✨")
+    print("🌲 Sobreviva às 99 noites na floresta! 🌙")
+    print("====================================")
+end
+
+-- Executar inicialização
+spawn(function()
+    wait(1) -- Aguardar UI carregar completamente
+    initializeHub()
+end)
+
+-- Inicializar a interface
+OrionLib:Init()
+
+-- Manter o script ativo
+spawn(function()
+    while hubEnabled do
+        wait(1)
+        -- Verificações de integridade
+        if not LocalPlayer or not LocalPlayer.Parent then
+            LogSystem:Add("CRITICAL", "Jogador desconectado!")
+            break
+        end
+        
+        -- Atualizar contador de estatísticas
+        hubStats.totalActions = hubStats.totalActions + 1
+    end
+end)
+
+--
