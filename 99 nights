@@ -1,0 +1,613 @@
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:FindFirstChild("Humanoid")
+local RootPart = Character:FindFirstChild("HumanoidRootPart")
+
+-- Variáveis do Hub
+local hubEnabled = true
+local autoFeatures = {
+    autoSurvive = false,
+    autoCollect = false,
+    autoHide = false,
+    autoRun = false,
+    autoTeleport = false
+}
+
+local espEnabled = {
+    players = false,
+    items = false,
+    monsters = false,
+    exits = false
+}
+
+local teleportLocations = {}
+local originalWalkSpeed = 16
+local originalJumpPower = 50
+
+-- Função de notificação
+local function notify(title, text, icon, time)
+    OrionLib:MakeNotification({
+        Name = title or "99 Nights Hub",
+        Content = text or "Funcionalidade ativada!",
+        Image = icon or "rbxassetid://4483345998",
+        Time = time or 5
+    })
+end
+
+-- Criar a UI principal
+local Window = OrionLib:MakeWindow({
+    Name = "🌲 99 Nights in Forest Hub 🌙",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "99NightsHub"
+})
+
+-- Tab Principal
+local MainTab = Window:MakeTab({
+    Name = "🏠 Principal",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Tab de Auto Features
+local AutoTab = Window:MakeTab({
+    Name = "🤖 Auto Features",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Tab de ESP e Visuals
+local VisualTab = Window:MakeTab({
+    Name = "👁️ ESP & Visuals",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Tab de Teleport
+local TeleportTab = Window:MakeTab({
+    Name = "📍 Teleports",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- Tab de Configurações
+local SettingsTab = Window:MakeTab({
+    Name = "⚙️ Configurações",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- SEÇÃO PRINCIPAL
+MainTab:AddLabel("🌟 99 Nights in Forest Hub Premium")
+MainTab:AddLabel("✨ Sobreviva às 99 noites na floresta!")
+
+-- Informações do jogador
+local PlayerSection = MainTab:AddSection({
+    Name = "👤 Informações do Jogador"
+})
+
+MainTab:AddLabel("Jogador: " .. LocalPlayer.Name)
+MainTab:AddLabel("ID: " .. LocalPlayer.UserId)
+
+-- Status do jogo
+local function updateGameStatus()
+    local nightValue = workspace:FindFirstChild("Night")
+    local currentNight = nightValue and nightValue.Value or 0
+    return "Noite: " .. currentNight .. "/99"
+end
+
+local statusLabel = MainTab:AddLabel(updateGameStatus())
+
+-- Atualizar status a cada segundo
+spawn(function()
+    while hubEnabled do
+        wait(1)
+        if statusLabel then
+            statusLabel:Set(updateGameStatus())
+        end
+    end
+end)
+
+-- Funcionalidades principais
+MainTab:AddButton({
+    Name = "🏥 Curar Completamente",
+    Callback = function()
+        if Character and Character:FindFirstChild("Humanoid") then
+            Character.Humanoid.Health = Character.Humanoid.MaxHealth
+            notify("Cura", "Vida restaurada completamente!", "rbxassetid://4483345998")
+        end
+    end
+})
+
+MainTab:AddButton({
+    Name = "⚡ Remover Cansaço",
+    Callback = function()
+        local stamina = Character:FindFirstChild("Stamina")
+        if stamina then
+            stamina.Value = 100
+            notify("Energia", "Cansaço removido!", "rbxassetid://4483345998")
+        end
+    end
+})
+
+MainTab:AddButton({
+    Name = "🍞 Remover Fome",
+    Callback = function()
+        local hunger = Character:FindFirstChild("Hunger")
+        if hunger then
+            hunger.Value = 100
+            notify("Fome", "Fome removida!", "rbxassetid://4483345998")
+        end
+    end
+})
+
+MainTab:AddButton({
+    Name = "💧 Remover Sede",
+    Callback = function()
+        local thirst = Character:FindFirstChild("Thirst")
+        if thirst then
+            thirst.Value = 100
+            notify("Sede", "Sede removida!", "rbxassetid://4483345998")
+        end
+    end
+})
+
+-- SEÇÃO AUTO FEATURES
+AutoTab:AddLabel("🤖 Funcionalidades Automáticas")
+
+AutoTab:AddToggle({
+    Name = "🛡️ Auto Sobrevivência",
+    Default = false,
+    Callback = function(value)
+        autoFeatures.autoSurvive = value
+        notify("Auto Sobrevivência", value and "Ativado" or "Desativado")
+        
+        if value then
+            spawn(function()
+                while autoFeatures.autoSurvive do
+                    wait(1)
+                    -- Auto heal
+                    if Character and Character:FindFirstChild("Humanoid") then
+                        if Character.Humanoid.Health < Character.Humanoid.MaxHealth * 0.5 then
+                            Character.Humanoid.Health = Character.Humanoid.MaxHealth
+                        end
+                    end
+                    
+                    -- Auto remove hunger/thirst
+                    local hunger = Character:FindFirstChild("Hunger")
+                    local thirst = Character:FindFirstChild("Thirst")
+                    local stamina = Character:FindFirstChild("Stamina")
+                    
+                    if hunger and hunger.Value < 50 then
+                        hunger.Value = 100
+                    end
+                    if thirst and thirst.Value < 50 then
+                        thirst.Value = 100
+                    end
+                    if stamina and stamina.Value < 50 then
+                        stamina.Value = 100
+                    end
+                end
+            end)
+        end
+    end
+})
+
+AutoTab:AddToggle({
+    Name = "📦 Auto Coletar Itens",
+    Default = false,
+    Callback = function(value)
+        autoFeatures.autoCollect = value
+        notify("Auto Coletar", value and "Ativado" or "Desativado")
+        
+        if value then
+            spawn(function()
+                while autoFeatures.autoCollect do
+                    wait(0.5)
+                    for _, item in pairs(workspace:GetChildren()) do
+                        if item.Name:find("Item") or item.Name:find("Food") or item.Name:find("Water") then
+                            if item:FindFirstChild("ClickDetector") and RootPart then
+                                local distance = (item.Position - RootPart.Position).Magnitude
+                                if distance <= 50 then
+                                    fireclickdetector(item.ClickDetector)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+AutoTab:AddToggle({
+    Name = "👻 Auto Esconder de Monstros",
+    Default = false,
+    Callback = function(value)
+        autoFeatures.autoHide = value
+        notify("Auto Esconder", value and "Ativado" or "Desativado")
+        
+        if value then
+            spawn(function()
+                while autoFeatures.autoHide do
+                    wait(0.1)
+                    for _, monster in pairs(workspace:GetChildren()) do
+                        if monster.Name:find("Monster") or monster.Name:find("Beast") then
+                            if monster:FindFirstChild("HumanoidRootPart") and RootPart then
+                                local distance = (monster.HumanoidRootPart.Position - RootPart.Position).Magnitude
+                                if distance <= 100 then
+                                    -- Teleportar para local seguro
+                                    local safeSpot = workspace:FindFirstChild("SafeHouse")
+                                    if safeSpot then
+                                        RootPart.CFrame = safeSpot.CFrame + Vector3.new(0, 5, 0)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+AutoTab:AddToggle({
+    Name = "🏃 Auto Correr de Perigo",
+    Default = false,
+    Callback = function(value)
+        autoFeatures.autoRun = value
+        notify("Auto Correr", value and "Ativado" or "Desativado")
+        
+        if value then
+            spawn(function()
+                while autoFeatures.autoRun do
+                    wait(0.1)
+                    if Character and Character:FindFirstChild("Humanoid") then
+                        if Character.Humanoid.Health < Character.Humanoid.MaxHealth * 0.3 then
+                            Character.Humanoid.WalkSpeed = 50
+                        else
+                            Character.Humanoid.WalkSpeed = originalWalkSpeed
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- SEÇÃO ESP E VISUALS
+VisualTab:AddLabel("👁️ Sistema ESP e Visuais")
+
+VisualTab:AddToggle({
+    Name = "👥 ESP Jogadores",
+    Default = false,
+    Callback = function(value)
+        espEnabled.players = value
+        
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local esp = player.Character:FindFirstChild("ESP_Box")
+                if value and not esp then
+                    -- Criar ESP
+                    local box = Instance.new("BoxHandleAdornment")
+                    box.Name = "ESP_Box"
+                    box.Parent = player.Character
+                    box.Adornee = player.Character
+                    box.Color3 = Color3.new(0, 1, 0)
+                    box.Transparency = 0.5
+                    box.Size = Vector3.new(4, 6, 4)
+                elseif not value and esp then
+                    esp:Destroy()
+                end
+            end
+        end
+    end
+})
+
+VisualTab:AddToggle({
+    Name = "📦 ESP Itens",
+    Default = false,
+    Callback = function(value)
+        espEnabled.items = value
+        
+        for _, item in pairs(workspace:GetChildren()) do
+            if item.Name:find("Item") or item.Name:find("Food") or item.Name:find("Water") then
+                local esp = item:FindFirstChild("ESP_Box")
+                if value and not esp then
+                    local box = Instance.new("BoxHandleAdornment")
+                    box.Name = "ESP_Box"
+                    box.Parent = item
+                    box.Adornee = item
+                    box.Color3 = Color3.new(1, 1, 0)
+                    box.Transparency = 0.3
+                    box.Size = item.Size + Vector3.new(1, 1, 1)
+                elseif not value and esp then
+                    esp:Destroy()
+                end
+            end
+        end
+    end
+})
+
+VisualTab:AddToggle({
+    Name = "👹 ESP Monstros",
+    Default = false,
+    Callback = function(value)
+        espEnabled.monsters = value
+        
+        for _, monster in pairs(workspace:GetChildren()) do
+            if monster.Name:find("Monster") or monster.Name:find("Beast") then
+                local esp = monster:FindFirstChild("ESP_Box")
+                if value and not esp then
+                    local box = Instance.new("BoxHandleAdornment")
+                    box.Name = "ESP_Box"
+                    box.Parent = monster
+                    box.Adornee = monster
+                    box.Color3 = Color3.new(1, 0, 0)
+                    box.Transparency = 0.2
+                    box.Size = Vector3.new(6, 8, 6)
+                elseif not value and esp then
+                    esp:Destroy()
+                end
+            end
+        end
+    end
+})
+
+VisualTab:AddButton({
+    Name = "🌙 Remover Escuridão",
+    Callback = function()
+        Lighting.Brightness = 2
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        notify("Iluminação", "Escuridão removida!", "rbxassetid://4483345998")
+    end
+})
+
+VisualTab:AddButton({
+    Name = "🌞 Dia Permanente",
+    Callback = function()
+        Lighting.TimeOfDay = "12:00:00"
+        Lighting.ClockTime = 12
+        notify("Tempo", "Dia permanente ativado!", "rbxassetid://4483345998")
+    end
+})
+
+-- SEÇÃO TELEPORTS
+TeleportTab:AddLabel("📍 Sistema de Teleporte")
+
+-- Teleports pré-definidos
+local commonTeleports = {
+    ["🏠 Casa Segura"] = Vector3.new(0, 50, 0),
+    ["🌲 Centro da Floresta"] = Vector3.new(100, 20, 100),
+    ["💧 Lago"] = Vector3.new(-200, 10, 150),
+    ["⛰️ Montanha"] = Vector3.new(300, 100, -200),
+    ["🏚️ Cabana Abandonada"] = Vector3.new(-150, 25, -100),
+}
+
+for name, position in pairs(commonTeleports) do
+    TeleportTab:AddButton({
+        Name = name,
+        Callback = function()
+            if RootPart then
+                RootPart.CFrame = CFrame.new(position)
+                notify("Teleporte", "Teleportado para: " .. name:gsub("🏠 ", ""):gsub("🌲 ", ""):gsub("💧 ", ""):gsub("⛰️ ", ""):gsub("🏚️ ", ""))
+            end
+        end
+    })
+end
+
+TeleportTab:AddButton({
+    Name = "👥 Teleportar para Jogador",
+    Callback = function()
+        local targetPlayer = nil
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                targetPlayer = player
+                break
+            end
+        end
+        
+        if targetPlayer and RootPart then
+            RootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(5, 0, 0)
+            notify("Teleporte", "Teleportado para: " .. targetPlayer.Name)
+        else
+            notify("Erro", "Nenhum jogador encontrado!")
+        end
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "📍 Salvar Posição",
+    Callback = function()
+        if RootPart then
+            teleportLocations["Posição Salva"] = RootPart.Position
+            notify("Posição", "Posição atual salva!", "rbxassetid://4483345998")
+        end
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "↩️ Voltar para Posição Salva",
+    Callback = function()
+        local savedPos = teleportLocations["Posição Salva"]
+        if savedPos and RootPart then
+            RootPart.CFrame = CFrame.new(savedPos)
+            notify("Teleporte", "Voltou para posição salva!")
+        else
+            notify("Erro", "Nenhuma posição salva encontrada!")
+        end
+    end
+})
+
+-- SEÇÃO CONFIGURAÇÕES
+SettingsTab:AddLabel("⚙️ Configurações do Hub")
+
+SettingsTab:AddSlider({
+    Name = "🚶 Velocidade de Movimento",
+    Min = 16,
+    Max = 200,
+    Default = 16,
+    Color = Color3.fromRGB(255,255,255),
+    Increment = 1,
+    ValueName = "Velocidade",
+    Callback = function(value)
+        if Character and Character:FindFirstChild("Humanoid") then
+            Character.Humanoid.WalkSpeed = value
+        end
+    end
+})
+
+SettingsTab:AddSlider({
+    Name = "🦘 Força do Pulo",
+    Min = 50,
+    Max = 300,
+    Default = 50,
+    Color = Color3.fromRGB(255,255,255),
+    Increment = 1,
+    ValueName = "Força",
+    Callback = function(value)
+        if Character and Character:FindFirstChild("Humanoid") then
+            Character.Humanoid.JumpPower = value
+        end
+    end
+})
+
+SettingsTab:AddToggle({
+    Name = "👻 Noclip",
+    Default = false,
+    Callback = function(value)
+        local function toggleNoclip(state)
+            if Character then
+                for _, part in pairs(Character:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = not state
+                    end
+                end
+            end
+        end
+        
+        toggleNoclip(value)
+        notify("Noclip", value and "Ativado" or "Desativado")
+    end
+})
+
+SettingsTab:AddToggle({
+    Name = "🌟 Voar",
+    Default = false,
+    Callback = function(value)
+        local flying = value
+        
+        if flying then
+            local bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            bodyVelocity.Parent = RootPart
+            
+            local function fly()
+                local camera = workspace.CurrentCamera
+                local moveVector = Vector3.new(0, 0, 0)
+                
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    moveVector = moveVector + camera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    moveVector = moveVector - camera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    moveVector = moveVector - camera.CFrame.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    moveVector = moveVector + camera.CFrame.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    moveVector = moveVector + Vector3.new(0, 1, 0)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    moveVector = moveVector - Vector3.new(0, 1, 0)
+                end
+                
+                bodyVelocity.Velocity = moveVector * 50
+            end
+            
+            local connection
+            connection = RunService.Heartbeat:Connect(function()
+                if flying then
+                    fly()
+                else
+                    connection:Disconnect()
+                    if bodyVelocity then
+                        bodyVelocity:Destroy()
+                    end
+                end
+            end)
+        end
+        
+        notify("Voar", value and "Ativado - Use WASD + Space/Shift" or "Desativado")
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "🔄 Resetar Configurações",
+    Callback = function()
+        if Character and Character:FindFirstChild("Humanoid") then
+            Character.Humanoid.WalkSpeed = originalWalkSpeed
+            Character.Humanoid.JumpPower = originalJumpPower
+        end
+        
+        -- Resetar todas as toggles
+        for key, _ in pairs(autoFeatures) do
+            autoFeatures[key] = false
+        end
+        
+        for key, _ in pairs(espEnabled) do
+            espEnabled[key] = false
+        end
+        
+        notify("Reset", "Todas as configurações foram resetadas!")
+    end
+})
+
+SettingsTab:AddButton({
+    Name = "❌ Fechar Hub",
+    Callback = function()
+        hubEnabled = false
+        OrionLib:Destroy()
+    end
+})
+
+-- Sistema de detecção de atualizações do jogo
+spawn(function()
+    while hubEnabled do
+        wait(5)
+        -- Verificar se o personagem ainda existe
+        if not Character or not Character.Parent then
+            Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+            Humanoid = Character:FindFirstChild("Humanoid")
+            RootPart = Character:FindFirstChild("HumanoidRootPart")
+        end
+    end
+end)
+
+-- Sistema anti-kick
+local mt = getrawmetatable(game)
+local old = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if method == "Kick" then
+        return
+    end
+    return old(self, ...)
+end)
