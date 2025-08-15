@@ -1,0 +1,217 @@
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+
+-- Lista de administradores - Automaticamente detecta o dono do jogo
+local ADMINS = {}
+
+-- Adiciona automaticamente o criador do jogo como admin
+local function setupAdmins()
+    local gameCreator = game.CreatorId
+    if game.CreatorType == Enum.CreatorType.User then
+        table.insert(ADMINS, gameCreator)
+    end
+end
+
+setupAdmins()
+
+-- Função para verificar se o jogador é admin
+local function isAdmin(player)
+    -- Verifica se é o dono do jogo
+    if player.UserId == game.CreatorId then
+        return true
+    end
+    
+    -- Verifica se está na lista de admins
+    for _, adminId in pairs(ADMINS) do
+        if player.UserId == adminId then
+            return true
+        end
+    end
+    return false
+end
+
+-- Função para encontrar jogador por nome (parcial)
+local function findPlayer(name)
+    name = name:lower()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Name:lower():sub(1, #name) == name then
+            return player
+        end
+    end
+    return nil
+end
+
+-- Função para processar comandos
+local function processCommand(player, message)
+    if not isAdmin(player) then return end
+    
+    local args = string.split(message, " ")
+    local command = args[1]:lower()
+    
+    if command == "/kill" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            target.Character.Humanoid.Health = 0
+            print(player.Name .. " matou " .. target.Name)
+        end
+        
+    elseif command == "/tp" and args[2] and args[3] then
+        local player1 = findPlayer(args[2])
+        local player2 = findPlayer(args[3])
+        if player1 and player2 and player1.Character and player2.Character then
+            if player1.Character:FindFirstChild("HumanoidRootPart") and player2.Character:FindFirstChild("HumanoidRootPart") then
+                player1.Character.HumanoidRootPart.CFrame = player2.Character.HumanoidRootPart.CFrame
+                print(player.Name .. " teleportou " .. player1.Name .. " para " .. player2.Name)
+            end
+        end
+        
+    elseif command == "/bring" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and player.Character then
+            if target.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("HumanoidRootPart") then
+                target.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame
+                print(player.Name .. " trouxe " .. target.Name)
+            end
+        end
+        
+    elseif command == "/kick" and args[2] then
+        local target = findPlayer(args[2])
+        if target then
+            target:Kick("Você foi kickado por um administrador")
+            print(player.Name .. " kickou " .. target.Name)
+        end
+        
+    elseif command == "/ban" and args[2] then
+        local target = findPlayer(args[2])
+        if target then
+            -- Simples sistema de ban (não persistente)
+            target:Kick("Você foi banido do servidor")
+            print(player.Name .. " baniu " .. target.Name)
+        end
+        
+    elseif command == "/speed" and args[2] and args[3] then
+        local target = findPlayer(args[2])
+        local speed = tonumber(args[3])
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") and speed then
+            target.Character.Humanoid.WalkSpeed = speed
+            print(player.Name .. " mudou a velocidade de " .. target.Name .. " para " .. speed)
+        end
+        
+    elseif command == "/jump" and args[2] and args[3] then
+        local target = findPlayer(args[2])
+        local jumpPower = tonumber(args[3])
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") and jumpPower then
+            target.Character.Humanoid.JumpPower = jumpPower
+            print(player.Name .. " mudou o pulo de " .. target.Name .. " para " .. jumpPower)
+        end
+        
+    elseif command == "/heal" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            target.Character.Humanoid.Health = target.Character.Humanoid.MaxHealth
+            print(player.Name .. " curou " .. target.Name)
+        end
+        
+    elseif command == "/god" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            target.Character.Humanoid.MaxHealth = math.huge
+            target.Character.Humanoid.Health = math.huge
+            print(player.Name .. " deu modo deus para " .. target.Name)
+        end
+        
+    elseif command == "/ungod" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+            target.Character.Humanoid.MaxHealth = 100
+            target.Character.Humanoid.Health = 100
+            print(player.Name .. " removeu modo deus de " .. target.Name)
+        end
+        
+    elseif command == "/freeze" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            target.Character.HumanoidRootPart.Anchored = true
+            print(player.Name .. " congelou " .. target.Name)
+        end
+        
+    elseif command == "/unfreeze" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            target.Character.HumanoidRootPart.Anchored = false
+            print(player.Name .. " descongelou " .. target.Name)
+        end
+        
+    elseif command == "/invisible" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character then
+            for _, part in pairs(target.Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 1
+                elseif part:IsA("Accessory") then
+                    part.Handle.Transparency = 1
+                end
+            end
+            print(player.Name .. " deixou " .. target.Name .. " invisível")
+        end
+        
+    elseif command == "/visible" and args[2] then
+        local target = findPlayer(args[2])
+        if target and target.Character then
+            for _, part in pairs(target.Character:GetChildren()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.Transparency = 0
+                elseif part:IsA("Accessory") then
+                    part.Handle.Transparency = 0
+                end
+            end
+            print(player.Name .. " deixou " .. target.Name .. " visível")
+        end
+        
+    elseif command == "/cmds" or command == "/commands" then
+        local commandsList = {
+            "/kill [jogador] - Mata o jogador",
+            "/tp [jogador1] [jogador2] - Teleporta jogador1 para jogador2",
+            "/bring [jogador] - Traz o jogador até você",
+            "/kick [jogador] - Kicka o jogador",
+            "/ban [jogador] - Bane o jogador",
+            "/speed [jogador] [velocidade] - Muda a velocidade",
+            "/jump [jogador] [força] - Muda a força do pulo",
+            "/heal [jogador] - Cura o jogador",
+            "/god [jogador] - Modo deus",
+            "/ungod [jogador] - Remove modo deus",
+            "/freeze [jogador] - Congela o jogador",
+            "/unfreeze [jogador] - Descongela o jogador",
+            "/invisible [jogador] - Deixa invisível",
+            "/visible [jogador] - Deixa visível",
+            "/cmds - Mostra esta lista"
+        }
+        
+        for _, cmd in pairs(commandsList) do
+            print(cmd)
+        end
+    end
+end
+
+-- Conectar eventos
+Players.PlayerAdded:Connect(function(player)
+    player.Chatted:Connect(function(message)
+        if message:sub(1, 1) == "/" then
+            processCommand(player, message)
+        end
+    end)
+end)
+
+-- Para jogadores já no servidor
+for _, player in pairs(Players:GetPlayers()) do
+    player.Chatted:Connect(function(message)
+        if message:sub(1, 1) == "/" then
+            processCommand(player, message)
+        end
+    end)
+end
+
+print("Sistema de comandos de administrador carregado!")
+print("O dono do jogo já tem permissões de admin automaticamente!")
+print("Digite /cmds no chat para ver todos os comandos disponíveis")
